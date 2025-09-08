@@ -5,15 +5,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import About from "./pages/About";
+import Executives from "./pages/Executives";
+import StudentLife from "./pages/StudentLife";
+import Events from "./pages/Events";
+import Constitution from "./pages/Constitution";
+import Welfare from "./pages/Welfare";
+import Contact from "./pages/Contact";
 import NotFound from "./pages/NotFound";
-
-// Placeholder components for other routes
-const Executives = () => <div className="min-h-screen flex items-center justify-center"><h1 className="text-2xl">Executives - Coming Soon</h1></div>;
-const StudentLife = () => <div className="min-h-screen flex items-center justify-center"><h1 className="text-2xl">Student Life - Coming Soon</h1></div>;
-const Events = () => <div className="min-h-screen flex items-center justify-center"><h1 className="text-2xl">Events - Coming Soon</h1></div>;
-const Constitution = () => <div className="min-h-screen flex items-center justify-center"><h1 className="text-2xl">Constitution - Coming Soon</h1></div>;
-const Welfare = () => <div className="min-h-screen flex items-center justify-center"><h1 className="text-2xl">Welfare Center - Coming Soon</h1></div>;
-const Contact = () => <div className="min-h-screen flex items-center justify-center"><h1 className="text-2xl">Contact - Coming Soon</h1></div>;
 
 const queryClient = new QueryClient();
 
