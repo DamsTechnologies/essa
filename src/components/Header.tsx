@@ -36,7 +36,7 @@ const Header = () => {
             className="h-10 w-10 object-contain"
           />
           <div className="flex flex-col">
-            <span className="font-heading font-bold text-primary text-lg leading-tight">ESSA</span>
+            <span className="font-heading font-bold text-primary text-lg leading-tight">ESTAM</span>
             <span className="text-xs text-muted-foreground leading-tight">Students' Association</span>
           </div>
         </Link>
