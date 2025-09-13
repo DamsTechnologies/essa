@@ -2,9 +2,12 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Menu, X } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useIsMobile } from "@/hooks/use-mobile";
+import FloatingMobileNav from "./FloatingMobileNav";
 
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const isMobile = useIsMobile();
 
   const navItems = [
     { label: "Home", href: "/" },
@@ -16,6 +19,11 @@ const Header = () => {
     { label: "Welfare", href: "/welfare" },
     { label: "Contact", href: "/contact" },
   ];
+
+  // Show floating nav on mobile, regular header on desktop
+  if (isMobile) {
+    return <FloatingMobileNav />;
+  }
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
