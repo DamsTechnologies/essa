@@ -10,8 +10,10 @@ import { Heart, Shield, Phone, Mail, MessageSquare, HandHeart, Lightbulb, Headph
 import FormSubmission from "@/components/FormSubmission";
 import { useState } from "react";
 import { sendSuggestionEmail, sendExpressionEmail } from "@/lib/emailService";
+import { useSEO, SEOConfigs } from "@/hooks/useSEO";
 
 const Welfare = () => {
+  useSEO(SEOConfigs.welfare);
   const [suggestionForm, setSuggestionForm] = useState({
     message: "",
     category: "",

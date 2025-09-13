@@ -3,8 +3,10 @@ import Footer from "@/components/Footer";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Mail, Phone, Instagram, Linkedin, ExternalLink } from "lucide-react";
+import { useSEO, SEOConfigs } from "@/hooks/useSEO";
 
 const Executives = () => {
+  useSEO(SEOConfigs.executives);
   // Current ESSA Executives
   const currentExecutives = [
     {

@@ -4,8 +4,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Download, FileText, Scale, Users } from "lucide-react";
+import { useSEO, SEOConfigs } from "@/hooks/useSEO";
 
 const Constitution = () => {
+  useSEO(SEOConfigs.constitution);
   const constitutionSections = [
     {
       id: "preamble",

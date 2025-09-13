@@ -6,8 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Mail, Phone, MapPin, Clock, MessageSquare, Instagram, Facebook, Twitter } from "lucide-react";
 import { useState } from "react";
+import { useSEO, SEOConfigs } from "@/hooks/useSEO";
 
 const Contact = () => {
+  useSEO(SEOConfigs.contact);
   const [contactForm, setContactForm] = useState({
     name: "",
     email: "",

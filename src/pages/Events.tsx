@@ -5,8 +5,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Calendar, MapPin, Clock, Users, ExternalLink, Filter } from "lucide-react";
 import { useState } from "react";
+import { useSEO, SEOConfigs } from "@/hooks/useSEO";
 
 const Events = () => {
+  useSEO(SEOConfigs.events);
   const [activeFilter, setActiveFilter] = useState("All");
 
   const upcomingEvents = [

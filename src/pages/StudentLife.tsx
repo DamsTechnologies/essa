@@ -5,8 +5,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Users, Calendar, Trophy, Heart, GraduationCap, Music, Camera, BookOpen } from "lucide-react";
 import { Link } from "react-router-dom";
+import { useSEO, SEOConfigs } from "@/hooks/useSEO";
 
 const StudentLife = () => {
+  useSEO(SEOConfigs.studentLife);
   const clubs = [
     {
       id: 1,

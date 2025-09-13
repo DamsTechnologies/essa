@@ -13,8 +13,10 @@ import {
   HandHeart,
   Lightbulb
 } from "lucide-react";
+import { useSEO, SEOConfigs } from "@/hooks/useSEO";
 
 const About = () => {
+  useSEO(SEOConfigs.about);
   const responsibilities = [
     {
       icon: Megaphone,

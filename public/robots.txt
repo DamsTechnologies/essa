@@ -10,5 +10,19 @@ Allow: /
 User-agent: facebookexternalhit
 Allow: /
 
+User-agent: LinkedInBot
+Allow: /
+
 User-agent: *
 Allow: /
+
+# Sitemap
+Sitemap: https://estam-sa.com/sitemap.xml
+
+# Crawl-delay for respectful crawling
+Crawl-delay: 1
+
+# Disallow admin areas (if any in future)
+Disallow: /admin/
+Disallow: /_next/
+Disallow: /api/
