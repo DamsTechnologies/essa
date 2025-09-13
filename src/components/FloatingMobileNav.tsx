@@ -10,12 +10,10 @@ const FloatingMobileNav = () => {
 
   const navItems = [
     { icon: Home, href: "/", label: "Home" },
-    { icon: Users, href: "/about", label: "About" },
     { icon: Users, href: "/executives", label: "Executives" },
     { icon: Calendar, href: "/events", label: "Events" },
     { icon: Heart, href: "/welfare", label: "Welfare" },
     { icon: Mail, href: "/contact", label: "Contact" },
-    { icon: Users, href: "/student-life", label: "Clubs" },
   ];
 
   useEffect(() => {
@@ -56,21 +54,15 @@ const FloatingMobileNav = () => {
           }
         `}
       >
-        <div className="flex items-center relative w-full">
-          {/* Logo - Transitions from left to center */}
+        <div className="flex items-center justify-center relative">
+          {/* Logo - Always visible */}
           <Link 
             to="/" 
-            className={`
-              flex items-center space-x-2 z-10 transition-all duration-500 ease-out
-              ${isExpanded 
-                ? 'absolute left-0' 
-                : 'absolute left-1/2 transform -translate-x-1/2'
-              }
-            `}
+            className="flex items-center space-x-2 z-10"
           >
             <img 
               src="/essa-logo.png" 
-              alt="ESTAM Logo" 
+              alt="ESSA Logo" 
               className="h-8 w-8 object-contain transition-transform duration-300 hover:scale-110"
             />
             <span 
@@ -83,18 +75,18 @@ const FloatingMobileNav = () => {
                 }
               `}
             >
-              ESTAM
+              ESSA
             </span>
           </Link>
 
           {/* Navigation Icons */}
           <div 
             className={`
-              flex items-center space-x-1 absolute right-0
+              flex items-center space-x-1 absolute
               transition-all duration-500 ease-out
               ${isExpanded 
-                ? 'opacity-100 translate-x-0' 
-                : 'opacity-0 translate-x-8 pointer-events-none'
+                ? 'opacity-100 translate-x-0 left-20' 
+                : 'opacity-0 translate-x-8 left-20 pointer-events-none'
               }
             `}
           >

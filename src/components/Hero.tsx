@@ -21,7 +21,7 @@ const Hero = () => {
       <div className="relative z-10 container max-w-screen-xl text-center text-white px-4">
         <div className="animate-fade-in">
           <h1 className="font-heading font-bold text-5xl md:text-7xl lg:text-8xl mb-6 leading-tight">
-            <span className="text-white">ESTAM</span>
+            <span className="text-white">ESSA</span>
             <br />
             <span className="text-accent">Students' Association</span>
           </h1>
@@ -52,7 +52,7 @@ const Hero = () => {
           <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
             <Button size="lg" variant="hero" asChild className="px-8 py-6 text-lg">
               <Link to="/about" className="flex items-center gap-2">
-                Explore ESTAM
+                Explore ESSA
                 <ArrowRight className="h-5 w-5" />
               </Link>
             </Button>
