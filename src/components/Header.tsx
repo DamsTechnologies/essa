@@ -21,10 +21,12 @@ const Header = () => {
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container flex h-16 max-w-screen-2xl items-center justify-between">
         {/* Logo */}
-        <Link to="/" className="flex items-center space-x-2">
-          <div className="h-8 w-8 rounded-full bg-gradient-primary flex items-center justify-center">
-            <span className="text-sm font-bold text-primary-foreground">E</span>
-          </div>
+        <Link to="/" className="flex items-center space-x-3">
+          <img 
+            src="/essa-logo.png" 
+            alt="ESSA Logo" 
+            className="h-10 w-10 object-contain"
+          />
           <div className="flex flex-col">
             <span className="font-heading font-bold text-primary text-lg leading-tight">ESSA</span>
             <span className="text-xs text-muted-foreground leading-tight">Students' Association</span>

@@ -1,4 +1,5 @@
 import Hero from "@/components/Hero";
+import ExecutiveSlider from "@/components/ExecutiveSlider";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -181,6 +182,13 @@ const Home = () => {
             <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-8">
               Dedicated students working tirelessly to represent your interests and improve campus life.
             </p>
+          </div>
+
+          <div className="max-w-2xl mx-auto mb-8">
+            <ExecutiveSlider />
+          </div>
+
+          <div className="text-center">
             <Button size="lg" asChild className="bg-primary hover:bg-primary/90">
               <Link to="/executives" className="flex items-center gap-2">
                 View All Executives

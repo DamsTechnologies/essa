@@ -8,15 +8,17 @@ const Footer = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
           {/* ESSA Info */}
           <div>
-            <div className="flex items-center space-x-2 mb-4">
-              <div className="h-8 w-8 rounded-full bg-accent flex items-center justify-center">
-                <span className="text-sm font-bold text-accent-foreground">E</span>
-              </div>
-              <div className="flex flex-col">
-                <span className="font-heading font-bold text-lg leading-tight">ESSA</span>
-                <span className="text-xs text-primary-foreground/70 leading-tight">Students' Association</span>
-              </div>
+          <div className="flex items-center space-x-3 mb-4">
+            <img 
+              src="/essa-logo.png" 
+              alt="ESSA Logo" 
+              className="h-10 w-10 object-contain"
+            />
+            <div className="flex flex-col">
+              <span className="font-heading font-bold text-lg leading-tight">ESSA</span>
+              <span className="text-xs text-primary-foreground/70 leading-tight">Students' Association</span>
             </div>
+          </div>
             <p className="text-primary-foreground/80 mb-4">
               Representing and supporting ESTAM University students through advocacy, 
               welfare programs, and community building.
@@ -95,19 +97,19 @@ const Footer = () => {
               <div className="flex items-center gap-3">
                 <Mail className="h-5 w-5 text-accent" />
                 <a 
-                  href="mailto:essa@estam.edu" 
+                  href="mailto:estamstudentsassociation2425@gmail.com" 
                   className="text-primary-foreground/80 hover:text-accent transition-colors"
                 >
-                  essa@estam.edu
+                  estamstudentsassociation2425@gmail.com
                 </a>
               </div>
               <div className="flex items-center gap-3">
                 <Phone className="h-5 w-5 text-accent" />
                 <a 
-                  href="tel:+1234567890" 
+                  href="tel:+22961076577" 
                   className="text-primary-foreground/80 hover:text-accent transition-colors"
                 >
-                  +1 (234) 567-8900
+                  +229 61 07 65 77
                 </a>
               </div>
             </div>
@@ -116,9 +118,10 @@ const Footer = () => {
 
         {/* Bottom Bar */}
         <div className="border-t border-primary-foreground/20 mt-12 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
-          <p className="text-primary-foreground/60 text-sm">
-            © 2024 ESSA - ESTAM Students' Association. All rights reserved.
-          </p>
+          <div className="text-primary-foreground/60 text-sm space-y-1">
+            <p>© 2025 ESSA - ESTAM Students' Association. All rights reserved.</p>
+            <p>Built with ❤️ by <a href="#" className="text-accent hover:text-accent/80 transition-colors">Dams Technologies</a></p>
+          </div>
           <div className="flex items-center gap-6 text-sm">
             <Link to="/privacy" className="text-primary-foreground/60 hover:text-accent transition-colors">
               Privacy Policy

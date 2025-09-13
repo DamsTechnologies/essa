@@ -4,62 +4,119 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Users, Calendar, Trophy, Heart, GraduationCap, Music, Camera, BookOpen } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const StudentLife = () => {
   const clubs = [
     {
       id: 1,
+      name: "Face of Estam (FOE)",
+      category: "Creative",
+      description: "Celebrating beauty, talent, and representation across ESTAM University.",
+      icon: <Users className="h-6 w-6" />,
+      members: 156,
+      contact: "foe@essa.estam.edu",
+      slug: "face-of-estam"
+    },
+    {
+      id: 2,
+      name: "Estam Football Club (ESTAM FC)",
+      category: "Athletics", 
+      description: "Premier football club representing ESTAM in inter-university competitions.",
+      icon: <Trophy className="h-6 w-6" />,
+      members: 89,
+      contact: "football@essa.estam.edu",
+      slug: "estam-football-club"
+    },
+    {
+      id: 3,
+      name: "Exceptional Tech Community (ETC)",
+      category: "Academic",
+      description: "Building the next generation of tech innovators and entrepreneurs.",
+      icon: <GraduationCap className="h-6 w-6" />,
+      members: 203,
+      contact: "tech@essa.estam.edu",
+      slug: "exceptional-tech-community"
+    },
+    {
+      id: 4,
+      name: "Estam Ensemble",
+      category: "Creative",
+      description: "Musical excellence through choir performances and cultural celebrations.",
+      icon: <Music className="h-6 w-6" />,
+      members: 78,
+      contact: "ensemble@essa.estam.edu",
+      slug: "estam-ensemble"
+    },
+    {
+      id: 5,
+      name: "The Mass Comm Giant",
+      category: "Academic",
+      description: "Leading voice in media, communication, and journalism excellence.",
+      icon: <BookOpen className="h-6 w-6" />,
+      members: 95,
+      contact: "masscomm@essa.estam.edu",
+      slug: "mass-comm-giant"
+    },
+    {
+      id: 6,
+      name: "That Mass Comm Gem",
+      category: "Academic",
+      description: "Showcasing the brilliance of mass communication students.",
+      icon: <Camera className="h-6 w-6" />,
+      members: 67,
+      contact: "masscommgem@essa.estam.edu",
+      slug: "mass-comm-gem"
+    },
+    {
+      id: 7,
+      name: "ESTAM Association of Muslim Students",
+      category: "Religious",
+      description: "Fostering Islamic values and community among Muslim students.",
+      icon: <Heart className="h-6 w-6" />,
+      members: 124,
+      contact: "muslim@essa.estam.edu",
+      slug: "muslim-students"
+    },
+    {
+      id: 8,
+      name: "ESTAM Christian Fellowship",
+      category: "Religious", 
+      description: "Building Christian community and spiritual growth on campus.",
+      icon: <Heart className="h-6 w-6" />,
+      members: 189,
+      contact: "christian@essa.estam.edu",
+      slug: "christian-fellowship"
+    },
+    {
+      id: 9,
       name: "ESTAM Debate Society",
       category: "Academic",
       description: "Developing critical thinking and public speaking skills through competitive debate.",
       icon: <BookOpen className="h-6 w-6" />,
       members: 45,
-      contact: "debate@essa.estam.edu"
+      contact: "debate@essa.estam.edu",
+      slug: "debate-society"
     },
     {
-      id: 2,
-      name: "Music & Arts Club",
-      category: "Creative",
-      description: "Celebrating musical talent and artistic expression across all genres.",
-      icon: <Music className="h-6 w-6" />,
-      members: 72,
-      contact: "music@essa.estam.edu"
-    },
-    {
-      id: 3,
-      name: "Photography Society",
-      category: "Creative",
-      description: "Capturing campus life and developing photography skills through workshops.",
-      icon: <Camera className="h-6 w-6" />,
-      members: 38,
-      contact: "photo@essa.estam.edu"
-    },
-    {
-      id: 4,
-      name: "Sports Committee",
-      category: "Athletics",
-      description: "Organizing inter-faculty tournaments and promoting sports excellence.",
+      id: 10,
+      name: "Exceptional Marketplace",
+      category: "Business",
+      description: "Student-led marketplace for entrepreneurial ventures and trade.",
       icon: <Trophy className="h-6 w-6" />,
-      members: 120,
-      contact: "sports@essa.estam.edu"
+      members: 143,
+      contact: "marketplace@essa.estam.edu",
+      slug: "exceptional-marketplace"
     },
     {
-      id: 5,
-      name: "Community Service",
-      category: "Service",
-      description: "Making a positive impact through volunteer work and community outreach.",
-      icon: <Heart className="h-6 w-6" />,
-      members: 65,
-      contact: "service@essa.estam.edu"
-    },
-    {
-      id: 6,
-      name: "Academic Excellence",
-      category: "Academic",
-      description: "Peer tutoring, study groups, and academic support initiatives.",
-      icon: <GraduationCap className="h-6 w-6" />,
-      members: 89,
-      contact: "academic@essa.estam.edu"
+      id: 11,
+      name: "Campus Gist",
+      category: "Media",
+      description: "Your go-to source for campus news, events, and trending stories.",
+      icon: <Users className="h-6 w-6" />,
+      members: 87,
+      contact: "campusgist@essa.estam.edu",
+      slug: "campus-gist"
     }
   ];
 
@@ -96,7 +153,7 @@ const StudentLife = () => {
     }
   ];
 
-  const categories = ["All", "Academic", "Creative", "Athletics", "Service"];
+  const categories = ["All", "Academic", "Creative", "Athletics", "Religious", "Business", "Media"];
 
   return (
     <div className="min-h-screen bg-background">
@@ -189,8 +246,10 @@ const StudentLife = () => {
                       <Users className="h-4 w-4" />
                       {club.members} members
                     </span>
-                    <Button variant="outline" size="sm">
-                      Join Club
+                    <Button variant="outline" size="sm" asChild>
+                      <Link to={`/clubs/${club.slug}`}>
+                        Learn More
+                      </Link>
                     </Button>
                   </div>
                 </CardContent>

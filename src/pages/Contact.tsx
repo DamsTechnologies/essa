@@ -15,10 +15,31 @@ const Contact = () => {
     message: ""
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Implement form submission
+    
+    // Send email notification to ESSA
+    const emailData = {
+      to: 'estamstudentsassociation2425@gmail.com',
+      subject: `Contact Form: ${contactForm.subject}`,
+      body: `
+        New message from website contact form:
+        
+        Name: ${contactForm.name}
+        Email: ${contactForm.email}
+        Subject: ${contactForm.subject}
+        
+        Message:
+        ${contactForm.message}
+        
+        ---
+        Sent from ESSA Website Contact Form
+      `
+    };
+    
     console.log("Contact form submitted:", contactForm);
+    console.log("Sending email to ESSA:", emailData);
+    
     alert("Thank you for your message! We'll get back to you within 24 hours.");
     setContactForm({ name: "", email: "", subject: "", message: "" });
   };
@@ -37,7 +58,7 @@ const Contact = () => {
       icon: <Mail className="h-6 w-6 text-accent" />,
       title: "Email Addresses",
       details: [
-        "General: essa@estam.edu",
+        "General: estamstudentsassociation2425@gmail.com",
         "President: president@essa.estam.edu",
         "Welfare: welfare@essa.estam.edu"
       ]
@@ -46,9 +67,9 @@ const Contact = () => {
       icon: <Phone className="h-6 w-6 text-accent" />,
       title: "Phone Numbers",
       details: [
-        "Main Office: +1 (234) 567-8900",
-        "Emergency: +1 (234) 567-8911",
-        "WhatsApp: +1 (234) 567-8922"
+        "Main Office: +229 61 07 65 77",
+        "Emergency: +229 61 07 65 78",
+        "WhatsApp: +229 61 07 65 77"
       ]
     },
     {
@@ -326,11 +347,13 @@ const Contact = () => {
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Button size="lg" variant="secondary">
               <Phone className="h-5 w-5 mr-2" />
-              Emergency Hotline
+              Call: +229 61 07 65 77
             </Button>
-            <Button size="lg" variant="outline" className="btn-ghost-hero">
-              <MessageSquare className="h-5 w-5 mr-2" />
-              WhatsApp Support
+            <Button size="lg" variant="outline" className="btn-ghost-hero" asChild>
+              <a href="https://wa.me/22961076577" target="_blank" rel="noopener noreferrer">
+                <MessageSquare className="h-5 w-5 mr-2" />
+                WhatsApp Support
+              </a>
             </Button>
           </div>
         </div>

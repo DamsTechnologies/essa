@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Heart, Shield, Phone, Mail, MessageSquare, HandHeart, Lightbulb, HeadphonesIcon } from "lucide-react";
+import FormSubmission from "@/components/FormSubmission";
 import { useState } from "react";
 
 const Welfare = () => {

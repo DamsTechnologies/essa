@@ -11,9 +11,13 @@ import Events from "./pages/Events";
 import Constitution from "./pages/Constitution";
 import Welfare from "./pages/Welfare";
 import Contact from "./pages/Contact";
-import NotFound from "./pages/NotFound";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import TermsOfService from "./pages/TermsOfService";
+import ClubDetail from "./pages/ClubDetail";
 
 const queryClient = new QueryClient();
+
+import NotFound from "./pages/NotFound";
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -30,7 +34,9 @@ const App = () => (
           <Route path="/constitution" element={<Constitution />} />
           <Route path="/welfare" element={<Welfare />} />
           <Route path="/contact" element={<Contact />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+          <Route path="/privacy" element={<PrivacyPolicy />} />
+          <Route path="/terms" element={<TermsOfService />} />
+          <Route path="/clubs/:slug" element={<ClubDetail />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
