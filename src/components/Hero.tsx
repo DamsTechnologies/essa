@@ -21,7 +21,7 @@ const Hero = () => {
       <div className="relative z-10 container max-w-screen-xl text-center text-white px-4">
         <div className="animate-fade-in">
           <h1 className="font-heading font-bold text-5xl md:text-7xl lg:text-8xl mb-6 leading-tight">
-            <span className="text-white">ESSA</span>
+            <span className="text-white">ESTAM</span>
             <br />
             <span className="text-accent">Students' Association</span>
           </h1>
