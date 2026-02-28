@@ -14,16 +14,203 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      contest_settings: {
+        Row: {
+          contest_name: string
+          created_at: string
+          id: string
+          is_enabled: boolean
+          updated_at: string
+          winner_id: string | null
+        }
+        Insert: {
+          contest_name?: string
+          created_at?: string
+          id?: string
+          is_enabled?: boolean
+          updated_at?: string
+          winner_id?: string | null
+        }
+        Update: {
+          contest_name?: string
+          created_at?: string
+          id?: string
+          is_enabled?: boolean
+          updated_at?: string
+          winner_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "contest_settings_winner_id_fkey"
+            columns: ["winner_id"]
+            isOneToOne: false
+            referencedRelation: "contestants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      contestants: {
+        Row: {
+          cover_image: string
+          created_at: string
+          department: string
+          id: string
+          is_active: boolean
+          name: string
+          total_votes: number
+          updated_at: string
+        }
+        Insert: {
+          cover_image: string
+          created_at?: string
+          department: string
+          id?: string
+          is_active?: boolean
+          name: string
+          total_votes?: number
+          updated_at?: string
+        }
+        Update: {
+          cover_image?: string
+          created_at?: string
+          department?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          total_votes?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      payments: {
+        Row: {
+          amount: number
+          contestant_id: string
+          created_at: string
+          device_metadata: Json | null
+          email: string
+          id: string
+          ip_address: string | null
+          payment_status: string
+          transaction_reference: string
+          verified_at: string | null
+          voter_name: string | null
+          votes_purchased: number
+        }
+        Insert: {
+          amount: number
+          contestant_id: string
+          created_at?: string
+          device_metadata?: Json | null
+          email: string
+          id?: string
+          ip_address?: string | null
+          payment_status?: string
+          transaction_reference: string
+          verified_at?: string | null
+          voter_name?: string | null
+          votes_purchased: number
+        }
+        Update: {
+          amount?: number
+          contestant_id?: string
+          created_at?: string
+          device_metadata?: Json | null
+          email?: string
+          id?: string
+          ip_address?: string | null
+          payment_status?: string
+          transaction_reference?: string
+          verified_at?: string | null
+          voter_name?: string | null
+          votes_purchased?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payments_contestant_id_fkey"
+            columns: ["contestant_id"]
+            isOneToOne: false
+            referencedRelation: "contestants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
+      votes: {
+        Row: {
+          contestant_id: string
+          created_at: string
+          id: string
+          payment_id: string
+          votes_added: number
+        }
+        Insert: {
+          contestant_id: string
+          created_at?: string
+          id?: string
+          payment_id: string
+          votes_added: number
+        }
+        Update: {
+          contestant_id?: string
+          created_at?: string
+          id?: string
+          payment_id?: string
+          votes_added?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "votes_contestant_id_fkey"
+            columns: ["contestant_id"]
+            isOneToOne: false
+            referencedRelation: "contestants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "votes_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      increment_votes: {
+        Args: { p_contestant_id: string; p_vote_count: number }
+        Returns: undefined
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "admin" | "user"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +337,8 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["admin", "user"],
+    },
   },
 } as const

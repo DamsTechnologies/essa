@@ -14,10 +14,12 @@ import Contact from "./pages/Contact";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfService from "./pages/TermsOfService";
 import ClubDetail from "./pages/ClubDetail";
+import FashionContest from "./pages/FashionContest";
+import AdminLogin from "./pages/AdminLogin";
+import AdminDashboard from "./pages/AdminDashboard";
+import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
-
-import NotFound from "./pages/NotFound";
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -31,12 +33,15 @@ const App = () => (
           <Route path="/executives" element={<Executives />} />
           <Route path="/student-life" element={<StudentLife />} />
           <Route path="/events" element={<Events />} />
+          <Route path="/events/fashion-contest" element={<FashionContest />} />
           <Route path="/constitution" element={<Constitution />} />
           <Route path="/welfare" element={<Welfare />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/privacy" element={<PrivacyPolicy />} />
           <Route path="/terms" element={<TermsOfService />} />
           <Route path="/clubs/:slug" element={<ClubDetail />} />
+          <Route path="/admin" element={<AdminLogin />} />
+          <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

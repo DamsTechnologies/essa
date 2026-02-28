@@ -1,1 +1,4 @@
 project_id = "tgalaebjukxyrzwudcmb"
+
+[functions.paystack-webhook]
+verify_jwt = false

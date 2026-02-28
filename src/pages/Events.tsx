@@ -1,9 +1,10 @@
+import { Link } from "react-router-dom";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar, MapPin, Clock, Users, ExternalLink, Filter } from "lucide-react";
+import { Calendar, MapPin, Clock, Users, ExternalLink, Filter, Star } from "lucide-react";
 import { useState } from "react";
 import { useSEO, SEOConfigs } from "@/hooks/useSEO";
 
@@ -146,6 +147,31 @@ const Events = () => {
             <p className="text-xl md:text-2xl text-white/90 max-w-3xl mx-auto leading-relaxed">
               Celebrating student life through vibrant events, competitions, and meaningful experiences
             </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Featured: Fashion Contest Banner */}
+      <section className="py-8 bg-gradient-primary">
+        <div className="container max-w-screen-2xl">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-6 text-primary-foreground">
+            <div className="flex items-center gap-4">
+              <div className="bg-accent/20 p-3 rounded-full">
+                <Star className="h-8 w-8 text-accent" />
+              </div>
+              <div>
+                <Badge className="bg-accent text-accent-foreground mb-2">🔥 Live Now</Badge>
+                <h3 className="text-2xl font-heading font-bold">Fashion Magazine Cover Contest</h3>
+                <p className="text-primary-foreground/80">
+                  Mass Communication Students • Vote & Support Your Favorite Contestant
+                </p>
+              </div>
+            </div>
+            <Button size="lg" variant="secondary" asChild>
+              <Link to="/events/fashion-contest">
+                Vote Now <ExternalLink className="ml-2 h-4 w-4" />
+              </Link>
+            </Button>
           </div>
         </div>
       </section>
