@@ -32,14 +32,28 @@ const VotingModal = ({ contestant, isOpen, onClose }: Props) => {
   const [email, setEmail] = useState("");
   const [voterName, setVoterName] = useState("");
   const [processing, setProcessing] = useState(false);
+  const [isCustom, setIsCustom] = useState(false);
+  const [customAmount, setCustomAmount] = useState("");
+
+  const computedCustomVotes = Math.floor(Number(customAmount) / 100);
+  const effectiveAmount = isCustom ? Number(customAmount) : selectedPackage?.amount || 0;
+  const effectiveVotes = isCustom ? computedCustomVotes : selectedPackage?.votes || 0;
+  const effectiveAmountKobo = effectiveAmount * 100;
+
+  const isValidCustom = isCustom && Number(customAmount) >= 100 && computedCustomVotes >= 1;
+  const canPay = email && (isCustom ? isValidCustom : !!selectedPackage);
 
   const handlePay = async () => {
-    if (!selectedPackage || !email || !contestant) return;
+    if (!canPay || !contestant) return;
 
-    // Basic email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!emailRegex.test(email)) {
       toast.error("Please enter a valid email address");
+      return;
+    }
+
+    if (isCustom && (Number(customAmount) > 1000000 || Number(customAmount) < 100)) {
+      toast.error("Custom amount must be between ₦100 and ₦1,000,000");
       return;
     }
 
@@ -50,9 +64,10 @@ const VotingModal = ({ contestant, isOpen, onClose }: Props) => {
         body: {
           email,
           voter_name: voterName || undefined,
-          amount: selectedPackage.amountKobo,
-          votes: selectedPackage.votes,
+          amount: effectiveAmountKobo,
+          votes: effectiveVotes,
           contestant_id: contestant.id,
+          payment_type: isCustom ? "custom" : "package",
         },
       });
 
@@ -63,7 +78,6 @@ const VotingModal = ({ contestant, isOpen, onClose }: Props) => {
       }
 
       if (data?.authorization_url) {
-        // Redirect to Paystack checkout
         window.location.href = data.authorization_url;
       } else {
         toast.error("Failed to get payment URL. Please try again.");
@@ -80,14 +94,18 @@ const VotingModal = ({ contestant, isOpen, onClose }: Props) => {
     setSelectedPackage(null);
     setEmail("");
     setVoterName("");
+    setIsCustom(false);
+    setCustomAmount("");
     onClose();
   };
 
   if (!contestant) return null;
 
+  const displayImage = contestant.profile_image || contestant.cover_image;
+
   return (
     <Dialog open={isOpen} onOpenChange={resetAndClose}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Heart className="h-5 w-5 text-accent" />
@@ -102,7 +120,7 @@ const VotingModal = ({ contestant, isOpen, onClose }: Props) => {
           {/* Contestant Preview */}
           <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
             <img
-              src={contestant.cover_image}
+              src={displayImage}
               alt={contestant.name}
               className="w-12 h-12 rounded-full object-cover"
             />
@@ -121,9 +139,9 @@ const VotingModal = ({ contestant, isOpen, onClose }: Props) => {
               {VOTE_PACKAGES.map((pkg) => (
                 <button
                   key={pkg.votes}
-                  onClick={() => setSelectedPackage(pkg)}
+                  onClick={() => { setSelectedPackage(pkg); setIsCustom(false); }}
                   className={`p-3 rounded-lg border-2 text-center transition-all duration-200 ${
-                    selectedPackage?.votes === pkg.votes
+                    !isCustom && selectedPackage?.votes === pkg.votes
                       ? "border-accent bg-accent/10 shadow-sm"
                       : "border-border hover:border-accent/50"
                   }`}
@@ -136,6 +154,43 @@ const VotingModal = ({ contestant, isOpen, onClose }: Props) => {
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Custom Amount */}
+          <div>
+            <button
+              onClick={() => { setIsCustom(true); setSelectedPackage(null); }}
+              className={`w-full p-3 rounded-lg border-2 text-center transition-all duration-200 ${
+                isCustom ? "border-accent bg-accent/10" : "border-border hover:border-accent/50"
+              }`}
+            >
+              <p className="font-medium text-foreground">Enter Custom Support Amount</p>
+              <p className="text-xs text-muted-foreground">₦100 = 1 Vote (minimum ₦100)</p>
+            </button>
+            {isCustom && (
+              <div className="mt-3">
+                <div className="relative">
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-medium">₦</span>
+                  <Input
+                    type="number"
+                    placeholder="Enter amount"
+                    value={customAmount}
+                    onChange={(e) => setCustomAmount(e.target.value)}
+                    className="pl-8"
+                    min={100}
+                    max={1000000}
+                  />
+                </div>
+                {customAmount && Number(customAmount) >= 100 && (
+                  <p className="text-sm text-accent font-medium mt-2">
+                    You are supporting with ₦{Number(customAmount).toLocaleString()} equivalent to {computedCustomVotes} vote{computedCustomVotes !== 1 ? "s" : ""}
+                  </p>
+                )}
+                {customAmount && Number(customAmount) > 0 && Number(customAmount) < 100 && (
+                  <p className="text-sm text-destructive mt-2">Minimum amount is ₦100</p>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Voter Info */}
@@ -170,7 +225,7 @@ const VotingModal = ({ contestant, isOpen, onClose }: Props) => {
           {/* Pay Button */}
           <Button
             className="w-full bg-accent text-accent-foreground hover:bg-accent/90 h-12 text-base"
-            disabled={!selectedPackage || !email || processing}
+            disabled={!canPay || processing}
             onClick={handlePay}
           >
             {processing ? (
@@ -180,8 +235,8 @@ const VotingModal = ({ contestant, isOpen, onClose }: Props) => {
             )}
             {processing
               ? "Processing..."
-              : selectedPackage
-              ? `Pay ₦${selectedPackage.amount.toLocaleString()} for ${selectedPackage.votes} Vote${selectedPackage.votes > 1 ? "s" : ""}`
+              : canPay
+              ? `Pay ₦${effectiveAmount.toLocaleString()} for ${effectiveVotes} Vote${effectiveVotes > 1 ? "s" : ""}`
               : "Select a package"}
           </Button>
 

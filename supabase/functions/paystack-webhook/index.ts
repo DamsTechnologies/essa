@@ -1,6 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { createHmac } from "https://deno.land/std@0.168.0/crypto/mod.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -48,20 +47,27 @@ serve(async (req) => {
       return new Response("OK", { status: 200, headers: corsHeaders });
     }
 
-    const { reference, metadata } = event.data;
+    const { reference, metadata, amount } = event.data;
     const contestant_id = metadata?.contestant_id;
-    const votes = metadata?.votes;
 
-    if (!reference || !contestant_id || !votes) {
+    if (!reference || !contestant_id) {
       console.error("Missing data in webhook payload");
       return new Response("Missing data", { status: 400, headers: corsHeaders });
+    }
+
+    // Server-side vote calculation from verified payment amount
+    // amount from Paystack is in kobo, ₦100 = 10000 kobo = 1 vote
+    const votes = Math.floor(amount / 10000);
+    if (votes < 1) {
+      console.error("Payment amount too low for votes");
+      return new Response("Amount too low", { status: 400, headers: corsHeaders });
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Check for duplicate processing (idempotency)
+    // Check for duplicate processing
     const { data: existingPayment } = await supabase
       .from("payments")
       .select("id, payment_status")
@@ -79,67 +85,41 @@ serve(async (req) => {
     const verifyData = await verifyRes.json();
 
     if (!verifyData.status || verifyData.data.status !== "success") {
-      // Mark as failed
       if (existingPayment) {
-        await supabase
-          .from("payments")
-          .update({ payment_status: "failed" })
-          .eq("transaction_reference", reference);
+        await supabase.from("payments").update({ payment_status: "failed" }).eq("transaction_reference", reference);
       }
       return new Response("Payment not successful", { status: 400, headers: corsHeaders });
     }
 
-    // Update payment status
+    // Recalculate votes from verified amount
+    const verifiedVotes = Math.floor(verifyData.data.amount / 10000);
+
     const paymentId = existingPayment?.id;
     if (paymentId) {
-      await supabase
-        .from("payments")
-        .update({ payment_status: "verified", verified_at: new Date().toISOString() })
+      await supabase.from("payments")
+        .update({ payment_status: "verified", verified_at: new Date().toISOString(), votes_purchased: verifiedVotes })
         .eq("id", paymentId);
 
-      // Insert vote record
-      await supabase.from("votes").insert({
-        contestant_id,
-        payment_id: paymentId,
-        votes_added: votes,
-      });
-
-      // Atomically increment votes
-      await supabase.rpc("increment_votes", {
-        p_contestant_id: contestant_id,
-        p_vote_count: votes,
-      });
+      await supabase.from("votes").insert({ contestant_id, payment_id: paymentId, votes_added: verifiedVotes });
+      await supabase.rpc("increment_votes", { p_contestant_id: contestant_id, p_vote_count: verifiedVotes });
     } else {
-      // Payment record doesn't exist yet, create it
-      const { data: newPayment } = await supabase
-        .from("payments")
-        .insert({
-          email: verifyData.data.customer?.email || "unknown",
-          amount: verifyData.data.amount / 100,
-          votes_purchased: votes,
-          contestant_id,
-          transaction_reference: reference,
-          payment_status: "verified",
-          verified_at: new Date().toISOString(),
-        })
-        .select("id")
-        .single();
+      const { data: newPayment } = await supabase.from("payments").insert({
+        email: verifyData.data.customer?.email || "unknown",
+        amount: verifyData.data.amount / 100,
+        votes_purchased: verifiedVotes,
+        contestant_id,
+        transaction_reference: reference,
+        payment_status: "verified",
+        verified_at: new Date().toISOString(),
+      }).select("id").single();
 
       if (newPayment) {
-        await supabase.from("votes").insert({
-          contestant_id,
-          payment_id: newPayment.id,
-          votes_added: votes,
-        });
-
-        await supabase.rpc("increment_votes", {
-          p_contestant_id: contestant_id,
-          p_vote_count: votes,
-        });
+        await supabase.from("votes").insert({ contestant_id, payment_id: newPayment.id, votes_added: verifiedVotes });
+        await supabase.rpc("increment_votes", { p_contestant_id: contestant_id, p_vote_count: verifiedVotes });
       }
     }
 
-    console.log(`Votes added: ${votes} for contestant ${contestant_id}`);
+    console.log(`Votes added: ${verifiedVotes} for contestant ${contestant_id}`);
     return new Response("OK", { status: 200, headers: corsHeaders });
   } catch (error) {
     console.error("Webhook error:", error);
