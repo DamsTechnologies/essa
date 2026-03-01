@@ -12,10 +12,14 @@ import { toast } from "sonner";
 export interface Contestant {
   id: string;
   name: string;
-  department: string;
+  design_title: string;
   cover_image: string;
+  profile_image: string | null;
   total_votes: number;
   is_active: boolean;
+  slug: string | null;
+  design_description: string | null;
+  biography: string | null;
 }
 
 const FashionContest = () => {
@@ -23,7 +27,7 @@ const FashionContest = () => {
     title: "Fashion Magazine Cover Contest",
     description: "Support your favorite Mass Communication student by voting for their magazine cover design. A fundraising-based voting contest.",
     keywords: "fashion contest, magazine cover, voting, ESTAM, mass communication, fundraising",
-    url: "https://estam-sa.com/events/fashion-contest",
+    url: "https://theessa.vercel.app/competition",
   });
 
   const [contestants, setContestants] = useState<Contestant[]>([]);
@@ -37,7 +41,6 @@ const FashionContest = () => {
     fetchContestants();
     fetchContestSettings();
 
-    // Real-time subscription for vote updates
     const channel = supabase
       .channel("contestants-realtime")
       .on(
@@ -60,7 +63,6 @@ const FashionContest = () => {
     };
   }, []);
 
-  // Handle payment return
   useEffect(() => {
     const paymentStatus = searchParams.get("payment");
     const reference = searchParams.get("reference") || searchParams.get("trxref");
@@ -78,7 +80,7 @@ const FashionContest = () => {
 
       if (data?.verified) {
         toast.success("Payment verified! Votes have been added. Thank you for your support! 🎉");
-        fetchContestants(); // Refresh
+        fetchContestants();
       } else {
         toast.error("Payment verification pending. Votes will be added shortly.");
       }
@@ -94,7 +96,20 @@ const FashionContest = () => {
       .eq("is_active", true)
       .order("total_votes", { ascending: false });
 
-    if (data) setContestants(data as Contestant[]);
+    if (data) {
+      setContestants(data.map((d) => ({
+        id: d.id,
+        name: d.name,
+        design_title: d.design_title,
+        cover_image: d.cover_image,
+        profile_image: d.profile_image,
+        total_votes: d.total_votes,
+        is_active: d.is_active,
+        slug: d.slug,
+        design_description: d.design_description,
+        biography: d.biography,
+      })));
+    }
     setLoading(false);
   };
 
@@ -121,7 +136,6 @@ const FashionContest = () => {
     <div className="min-h-screen bg-background">
       <Header />
 
-      {/* Hero */}
       <section className="relative bg-gradient-hero py-16 md:py-24">
         <div className="container max-w-screen-xl text-center text-white px-4">
           <h1 className="font-heading font-bold text-4xl md:text-6xl mb-4">
@@ -138,10 +152,8 @@ const FashionContest = () => {
         </div>
       </section>
 
-      {/* Leaderboard */}
       <ContestLeaderboard contestants={contestants} loading={loading} />
 
-      {/* Contestants Grid */}
       <ContestantGrid
         contestants={contestants}
         loading={loading}
@@ -149,7 +161,6 @@ const FashionContest = () => {
         onVote={handleVote}
       />
 
-      {/* Voting Modal */}
       <VotingModal
         contestant={selectedContestant}
         isOpen={isVotingOpen}

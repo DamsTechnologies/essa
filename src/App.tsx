@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Index from "./pages/Index";
 import About from "./pages/About";
 import Executives from "./pages/Executives";
@@ -15,6 +15,7 @@ import PrivacyPolicy from "./pages/PrivacyPolicy";
 import TermsOfService from "./pages/TermsOfService";
 import ClubDetail from "./pages/ClubDetail";
 import FashionContest from "./pages/FashionContest";
+import ContestantDetail from "./pages/ContestantDetail";
 import AdminLogin from "./pages/AdminLogin";
 import AdminDashboard from "./pages/AdminDashboard";
 import NotFound from "./pages/NotFound";
@@ -33,7 +34,10 @@ const App = () => (
           <Route path="/executives" element={<Executives />} />
           <Route path="/student-life" element={<StudentLife />} />
           <Route path="/events" element={<Events />} />
-          <Route path="/events/fashion-contest" element={<FashionContest />} />
+          <Route path="/competition" element={<FashionContest />} />
+          <Route path="/contestant/:slug" element={<ContestantDetail />} />
+          {/* Legacy redirect */}
+          <Route path="/events/fashion-contest" element={<Navigate to="/competition" replace />} />
           <Route path="/constitution" element={<Constitution />} />
           <Route path="/welfare" element={<Welfare />} />
           <Route path="/contact" element={<Contact />} />

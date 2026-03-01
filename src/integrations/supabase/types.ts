@@ -51,32 +51,44 @@ export type Database = {
       }
       contestants: {
         Row: {
+          biography: string | null
           cover_image: string
           created_at: string
-          department: string
+          design_description: string | null
+          design_title: string
           id: string
           is_active: boolean
           name: string
+          profile_image: string | null
+          slug: string | null
           total_votes: number
           updated_at: string
         }
         Insert: {
+          biography?: string | null
           cover_image: string
           created_at?: string
-          department: string
+          design_description?: string | null
+          design_title: string
           id?: string
           is_active?: boolean
           name: string
+          profile_image?: string | null
+          slug?: string | null
           total_votes?: number
           updated_at?: string
         }
         Update: {
+          biography?: string | null
           cover_image?: string
           created_at?: string
-          department?: string
+          design_description?: string | null
+          design_title?: string
           id?: string
           is_active?: boolean
           name?: string
+          profile_image?: string | null
+          slug?: string | null
           total_votes?: number
           updated_at?: string
         }

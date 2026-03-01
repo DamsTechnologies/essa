@@ -13,27 +13,28 @@ serve(async (req) => {
   }
 
   try {
-    const { email, voter_name, amount, votes, contestant_id } = await req.json();
+    const { email, voter_name, amount, votes, contestant_id, payment_type } = await req.json();
 
-    // Validate inputs
-    if (!email || !amount || !votes || !contestant_id) {
+    if (!email || !amount || !contestant_id) {
       return new Response(
         JSON.stringify({ error: "Missing required fields" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // Validate vote packages
-    const validPackages: Record<number, number> = {
-      10000: 1,   // ₦100 = 1 vote (amount in kobo)
-      50000: 5,   // ₦500 = 5 votes
-      100000: 10, // ₦1000 = 10 votes
-      500000: 50, // ₦5000 = 50 votes
-    };
-
-    if (!validPackages[amount] || validPackages[amount] !== votes) {
+    // Validate amount (minimum ₦100 = 10000 kobo)
+    if (amount < 10000 || amount > 100000000) {
       return new Response(
-        JSON.stringify({ error: "Invalid vote package" }),
+        JSON.stringify({ error: "Invalid amount" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Server-side vote calculation: ₦100 = 1 vote (amount is in kobo)
+    const serverCalculatedVotes = Math.floor(amount / 10000);
+    if (serverCalculatedVotes < 1) {
+      return new Response(
+        JSON.stringify({ error: "Amount too low for any votes" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -46,10 +47,12 @@ serve(async (req) => {
       );
     }
 
-    // Generate unique reference
     const reference = `vote_${contestant_id.slice(0, 8)}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
-    // Initialize Paystack transaction
+    // Determine callback URL - use production domain
+    const origin = req.headers.get("origin") || "https://theessa.vercel.app";
+    const callbackUrl = `${origin}/competition?payment=success`;
+
     const paystackRes = await fetch("https://api.paystack.co/transaction/initialize", {
       method: "POST",
       headers: {
@@ -58,15 +61,16 @@ serve(async (req) => {
       },
       body: JSON.stringify({
         email,
-        amount, // in kobo
+        amount,
         reference,
         currency: "NGN",
         metadata: {
           contestant_id,
-          votes,
+          votes: serverCalculatedVotes,
           voter_name: voter_name || "Anonymous",
+          payment_type: payment_type || "package",
         },
-        callback_url: `${req.headers.get("origin") || ""}/events/fashion-contest?payment=success`,
+        callback_url: callbackUrl,
       }),
     });
 
@@ -79,7 +83,6 @@ serve(async (req) => {
       );
     }
 
-    // Store payment record
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
@@ -87,8 +90,8 @@ serve(async (req) => {
     await supabase.from("payments").insert({
       email,
       voter_name: voter_name || null,
-      amount: amount / 100, // store in naira
-      votes_purchased: votes,
+      amount: amount / 100,
+      votes_purchased: serverCalculatedVotes,
       contestant_id,
       transaction_reference: reference,
       payment_status: "pending",
