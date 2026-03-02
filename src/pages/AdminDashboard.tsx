@@ -92,7 +92,16 @@ const AdminDashboard = () => {
 
   const handleLogout = async () => { await supabase.auth.signOut(); navigate("/admin"); };
 
+  const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
+
   const uploadImage = async (file: File, prefix: string) => {
+    if (file.size > MAX_FILE_SIZE) {
+      throw new Error(`Image too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Maximum is 2MB.`);
+    }
+    const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
+    if (!allowedTypes.includes(file.type)) {
+      throw new Error("Only JPEG, PNG, and WebP images are allowed.");
+    }
     const ext = file.name.split(".").pop();
     const fileName = `${prefix}_${Date.now()}.${ext}`;
     const { error } = await supabase.storage.from("contestant-images").upload(fileName, file);
@@ -134,8 +143,8 @@ const AdminDashboard = () => {
         if (error) toast.error("Failed to add contestant");
         else toast.success("Contestant added");
       }
-    } catch {
-      toast.error("Failed to upload image");
+    } catch (err: any) {
+      toast.error(err?.message || "Failed to upload image");
     }
 
     resetForm();

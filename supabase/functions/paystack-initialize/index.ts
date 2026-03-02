@@ -7,14 +7,43 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// Simple in-memory rate limiter (per function instance)
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RATE_LIMIT = 10; // max requests per window
+const RATE_WINDOW_MS = 60_000; // 1 minute
+
+function isRateLimited(key: string): boolean {
+  const now = Date.now();
+  const entry = rateLimitMap.get(key);
+  if (!entry || now > entry.resetAt) {
+    rateLimitMap.set(key, { count: 1, resetAt: now + RATE_WINDOW_MS });
+    return false;
+  }
+  entry.count++;
+  return entry.count > RATE_LIMIT;
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { email, voter_name, amount, votes, contestant_id, payment_type } = await req.json();
+    // Rate limiting by IP
+    const clientIp = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+      || req.headers.get("cf-connecting-ip")
+      || "unknown";
 
+    if (isRateLimited(clientIp)) {
+      return new Response(
+        JSON.stringify({ error: "Too many requests. Please try again later." }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const { email, voter_name, amount, contestant_id, payment_type } = await req.json();
+
+    // Input validation
     if (!email || !amount || !contestant_id) {
       return new Response(
         JSON.stringify({ error: "Missing required fields" }),
@@ -22,10 +51,28 @@ serve(async (req) => {
       );
     }
 
-    // Validate amount (minimum ₦100 = 10000 kobo)
-    if (amount < 10000 || amount > 100000000) {
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (typeof email !== "string" || !emailRegex.test(email) || email.length > 255) {
       return new Response(
-        JSON.stringify({ error: "Invalid amount" }),
+        JSON.stringify({ error: "Invalid email" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Validate contestant_id is UUID-like
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (typeof contestant_id !== "string" || !uuidRegex.test(contestant_id)) {
+      return new Response(
+        JSON.stringify({ error: "Invalid contestant" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Validate amount (minimum ₦100 = 10000 kobo, max ₦1,000,000 = 100000000 kobo)
+    if (typeof amount !== "number" || !Number.isInteger(amount) || amount < 10000 || amount > 100000000) {
+      return new Response(
+        JSON.stringify({ error: "Invalid amount. Must be between ₦100 and ₦1,000,000" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -44,6 +91,38 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ error: "Payment service not configured" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Verify contestant exists and is active
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    const { data: contestantData } = await supabase
+      .from("contestants")
+      .select("id, is_active")
+      .eq("id", contestant_id)
+      .single();
+
+    if (!contestantData || !contestantData.is_active) {
+      return new Response(
+        JSON.stringify({ error: "Contestant not found or inactive" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Check contest is enabled
+    const { data: settings } = await supabase
+      .from("contest_settings")
+      .select("is_enabled")
+      .limit(1)
+      .single();
+
+    if (!settings?.is_enabled) {
+      return new Response(
+        JSON.stringify({ error: "Voting is currently closed" }),
+        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
@@ -67,8 +146,8 @@ serve(async (req) => {
         metadata: {
           contestant_id,
           votes: serverCalculatedVotes,
-          voter_name: voter_name || "Anonymous",
-          payment_type: payment_type || "package",
+          voter_name: (typeof voter_name === "string" ? voter_name.slice(0, 100) : "") || "Anonymous",
+          payment_type: payment_type === "custom" ? "custom" : "package",
         },
         callback_url: callbackUrl,
       }),
@@ -83,19 +162,22 @@ serve(async (req) => {
       );
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
+    // Store payment with device metadata for audit
     await supabase.from("payments").insert({
       email,
-      voter_name: voter_name || null,
+      voter_name: (typeof voter_name === "string" ? voter_name.slice(0, 100) : null),
       amount: amount / 100,
       votes_purchased: serverCalculatedVotes,
       contestant_id,
       transaction_reference: reference,
       payment_status: "pending",
-      ip_address: req.headers.get("x-forwarded-for") || req.headers.get("cf-connecting-ip") || null,
+      ip_address: clientIp !== "unknown" ? clientIp : null,
+      device_metadata: {
+        user_agent: req.headers.get("user-agent")?.slice(0, 500) || null,
+        origin: req.headers.get("origin") || null,
+        referer: req.headers.get("referer") || null,
+        timestamp: new Date().toISOString(),
+      },
     });
 
     return new Response(
