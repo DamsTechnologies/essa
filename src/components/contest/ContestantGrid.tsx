@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Heart } from "lucide-react";
 import type { Contestant } from "@/pages/FashionContest";
 import { Skeleton } from "@/components/ui/skeleton";
+import OptimizedImage from "@/components/contest/OptimizedImage";
 
 interface Props {
   contestants: Contestant[];
@@ -69,16 +70,17 @@ const ContestantGrid = ({ contestants, loading, contestEnabled, onVote }: Props)
                 className="group overflow-hidden hover:shadow-card transition-all duration-300"
               >
                 <div
-                  className="aspect-[3/4] overflow-hidden relative cursor-pointer"
+                  className="relative cursor-pointer"
                   onClick={() => navigate(`/contestant/${contestant.slug || contestant.id}`)}
                 >
-                  <img
+                  <OptimizedImage
                     src={contestant.cover_image}
                     alt={`${contestant.name}'s magazine cover`}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                    loading="lazy"
+                    aspectRatio="aspect-[3/4]"
+                    className="group-hover:scale-105 transition-transform duration-500"
+                    sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                   />
-                  <div className="absolute top-2 right-2 bg-primary/90 text-primary-foreground rounded-full px-2 py-0.5 text-xs md:text-sm font-bold backdrop-blur-sm">
+                  <div className="absolute top-2 right-2 bg-primary/90 text-primary-foreground rounded-full px-2 py-0.5 text-xs md:text-sm font-bold backdrop-blur-sm z-10">
                     {contestant.total_votes.toLocaleString()} votes
                   </div>
                 </div>

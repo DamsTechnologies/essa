@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Heart, ArrowLeft, Share2, Loader2 } from "lucide-react";
 import VotingModal from "@/components/contest/VotingModal";
+import OptimizedImage from "@/components/contest/OptimizedImage";
 import type { Contestant } from "@/pages/FashionContest";
 import { toast } from "sonner";
 
@@ -115,14 +116,14 @@ const ContestantDetail = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {/* Cover Image */}
           <div className="space-y-4">
-            <div className="aspect-[3/4] rounded-2xl overflow-hidden shadow-premium">
-              <img
-                src={contestant.cover_image}
-                alt={`${contestant.name}'s magazine cover`}
-                className="w-full h-full object-cover"
-                loading="lazy"
-              />
-            </div>
+            <OptimizedImage
+              src={contestant.cover_image}
+              alt={`${contestant.name}'s magazine cover`}
+              aspectRatio="aspect-[3/4]"
+              className="rounded-2xl shadow-premium"
+              priority
+              sizes="(max-width: 768px) 100vw, 50vw"
+            />
           </div>
 
           {/* Info */}

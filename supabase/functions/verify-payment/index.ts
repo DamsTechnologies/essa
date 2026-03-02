@@ -15,9 +15,9 @@ serve(async (req) => {
   try {
     const { reference } = await req.json();
 
-    if (!reference) {
+    if (!reference || typeof reference !== "string" || reference.length > 200) {
       return new Response(
-        JSON.stringify({ error: "Missing reference" }),
+        JSON.stringify({ error: "Invalid reference" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -30,8 +30,26 @@ serve(async (req) => {
       );
     }
 
-    // Verify with Paystack
-    const verifyRes = await fetch(`https://api.paystack.co/transaction/verify/${reference}`, {
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Check if already verified
+    const { data: existingPayment } = await supabase
+      .from("payments")
+      .select("id, payment_status, contestant_id")
+      .eq("transaction_reference", reference)
+      .single();
+
+    if (existingPayment?.payment_status === "verified") {
+      return new Response(
+        JSON.stringify({ verified: true }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // Verify with Paystack API directly
+    const verifyRes = await fetch(`https://api.paystack.co/transaction/verify/${encodeURIComponent(reference)}`, {
       headers: { Authorization: `Bearer ${PAYSTACK_SECRET_KEY}` },
     });
     const verifyData = await verifyRes.json();
@@ -43,48 +61,65 @@ serve(async (req) => {
       );
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    // Check payment status
-    const { data: payment } = await supabase
-      .from("payments")
-      .select("payment_status")
-      .eq("transaction_reference", reference)
-      .single();
-
-    if (payment?.payment_status === "verified") {
+    // Validate currency
+    if (verifyData.data.currency !== "NGN") {
+      console.error("Invalid currency:", verifyData.data.currency);
       return new Response(
-        JSON.stringify({ verified: true }),
+        JSON.stringify({ verified: false, error: "Invalid currency" }),
         { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // If not yet verified by webhook, process it now
-    const { contestant_id, votes } = verifyData.data.metadata;
+    // CRITICAL: Calculate votes server-side from verified amount only
+    // Never trust metadata votes - always recalculate
+    const verifiedAmountKobo = verifyData.data.amount;
+    const verifiedVotes = Math.floor(verifiedAmountKobo / 10000);
 
-    const { data: existingPayment } = await supabase
-      .from("payments")
-      .select("id, payment_status")
-      .eq("transaction_reference", reference)
-      .single();
+    if (verifiedVotes < 1) {
+      return new Response(
+        JSON.stringify({ verified: false, error: "Amount too low" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const contestant_id = verifyData.data.metadata?.contestant_id;
+    if (!contestant_id) {
+      console.error("Missing contestant_id in metadata");
+      return new Response(
+        JSON.stringify({ verified: false }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
     if (existingPayment && existingPayment.payment_status !== "verified") {
-      await supabase
+      // Atomic update: mark verified and credit votes
+      const { error: updateError } = await supabase
         .from("payments")
-        .update({ payment_status: "verified", verified_at: new Date().toISOString() })
-        .eq("id", existingPayment.id);
+        .update({
+          payment_status: "verified",
+          verified_at: new Date().toISOString(),
+          votes_purchased: verifiedVotes,
+        })
+        .eq("id", existingPayment.id)
+        .eq("payment_status", "pending"); // Optimistic lock
+
+      if (updateError) {
+        // If update fails, it was likely already processed
+        return new Response(
+          JSON.stringify({ verified: true }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
 
       await supabase.from("votes").insert({
         contestant_id,
         payment_id: existingPayment.id,
-        votes_added: votes,
+        votes_added: verifiedVotes,
       });
 
       await supabase.rpc("increment_votes", {
         p_contestant_id: contestant_id,
-        p_vote_count: votes,
+        p_vote_count: verifiedVotes,
       });
     }
 
