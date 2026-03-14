@@ -14,8 +14,9 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-  Users, DollarSign, Trophy, LogOut, Plus, Trash2, Edit, Loader2, Vote, Settings,
+  Users, DollarSign, Trophy, LogOut, Plus, Trash2, Edit, Loader2, Vote, Settings, Calendar,
 } from "lucide-react";
+import EventManager from "@/components/admin/EventManager";
 import { toast } from "sonner";
 
 interface Contestant {
@@ -48,7 +49,7 @@ const AdminDashboard = () => {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [contestEnabled, setContestEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"contestants" | "payments" | "settings">("contestants");
+  const [activeTab, setActiveTab] = useState<"contestants" | "payments" | "settings" | "events">("contestants");
 
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editingContestant, setEditingContestant] = useState<Contestant | null>(null);
@@ -219,6 +220,7 @@ const AdminDashboard = () => {
         <div className="flex gap-2 mb-6 flex-wrap">
           {([
             { key: "contestants" as const, icon: Users, label: "Contestants" },
+            { key: "events" as const, icon: Calendar, label: "Events" },
             { key: "payments" as const, icon: DollarSign, label: "Payments" },
             { key: "settings" as const, icon: Settings, label: "Settings" },
           ]).map((tab) => (
@@ -298,6 +300,9 @@ const AdminDashboard = () => {
             </CardContent>
           </Card>
         )}
+
+        {/* Events Tab */}
+        {activeTab === "events" && <EventManager />}
 
         {/* Payments Tab */}
         {activeTab === "payments" && (

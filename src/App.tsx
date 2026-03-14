@@ -18,6 +18,8 @@ import FashionContest from "./pages/FashionContest";
 import ContestantDetail from "./pages/ContestantDetail";
 import AdminLogin from "./pages/AdminLogin";
 import AdminDashboard from "./pages/AdminDashboard";
+import EventsHub from "./pages/EventsHub";
+import EventDetail from "./pages/EventDetail";
 import NotFound from "./pages/NotFound";
 import ScrollToTop from "./components/ScrollToTop";
 
@@ -46,6 +48,8 @@ const App = () => (
           <Route path="/privacy" element={<PrivacyPolicy />} />
           <Route path="/terms" element={<TermsOfService />} />
           <Route path="/clubs/:slug" element={<ClubDetail />} />
+          <Route path="/events-hub" element={<EventsHub />} />
+          <Route path="/events-hub/:eventId" element={<EventDetail />} />
           <Route path="/admin" element={<AdminLogin />} />
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="*" element={<NotFound />} />
