@@ -49,7 +49,7 @@ const AdminDashboard = () => {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [contestEnabled, setContestEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"contestants" | "payments" | "settings">("contestants");
+  const [activeTab, setActiveTab] = useState<"contestants" | "payments" | "settings" | "events">("contestants");
 
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editingContestant, setEditingContestant] = useState<Contestant | null>(null);
