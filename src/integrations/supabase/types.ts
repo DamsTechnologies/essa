@@ -94,6 +94,277 @@ export type Database = {
         }
         Relationships: []
       }
+      event_contestants: {
+        Row: {
+          created_at: string
+          department: string | null
+          description: string | null
+          event_id: string
+          id: string
+          is_active: boolean
+          name: string
+          profile_image: string | null
+          slug: string | null
+          total_votes: number
+          updated_at: string
+          video_url: string | null
+        }
+        Insert: {
+          created_at?: string
+          department?: string | null
+          description?: string | null
+          event_id: string
+          id?: string
+          is_active?: boolean
+          name: string
+          profile_image?: string | null
+          slug?: string | null
+          total_votes?: number
+          updated_at?: string
+          video_url?: string | null
+        }
+        Update: {
+          created_at?: string
+          department?: string | null
+          description?: string | null
+          event_id?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+          profile_image?: string | null
+          slug?: string | null
+          total_votes?: number
+          updated_at?: string
+          video_url?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_contestants_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      event_monetary_votes: {
+        Row: {
+          contestant_id: string
+          created_at: string
+          event_id: string
+          id: string
+          payment_id: string
+          votes_added: number
+        }
+        Insert: {
+          contestant_id: string
+          created_at?: string
+          event_id: string
+          id?: string
+          payment_id: string
+          votes_added: number
+        }
+        Update: {
+          contestant_id?: string
+          created_at?: string
+          event_id?: string
+          id?: string
+          payment_id?: string
+          votes_added?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_monetary_votes_contestant_id_fkey"
+            columns: ["contestant_id"]
+            isOneToOne: false
+            referencedRelation: "event_contestants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_monetary_votes_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_monetary_votes_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "event_payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      event_payments: {
+        Row: {
+          amount: number
+          contestant_id: string
+          created_at: string
+          device_metadata: Json | null
+          email: string
+          event_id: string
+          id: string
+          ip_address: string | null
+          payment_status: string
+          transaction_reference: string
+          verified_at: string | null
+          voter_name: string | null
+          votes_purchased: number
+        }
+        Insert: {
+          amount: number
+          contestant_id: string
+          created_at?: string
+          device_metadata?: Json | null
+          email: string
+          event_id: string
+          id?: string
+          ip_address?: string | null
+          payment_status?: string
+          transaction_reference: string
+          verified_at?: string | null
+          voter_name?: string | null
+          votes_purchased: number
+        }
+        Update: {
+          amount?: number
+          contestant_id?: string
+          created_at?: string
+          device_metadata?: Json | null
+          email?: string
+          event_id?: string
+          id?: string
+          ip_address?: string | null
+          payment_status?: string
+          transaction_reference?: string
+          verified_at?: string | null
+          voter_name?: string | null
+          votes_purchased?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_payments_contestant_id_fkey"
+            columns: ["contestant_id"]
+            isOneToOne: false
+            referencedRelation: "event_contestants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_payments_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      event_votes: {
+        Row: {
+          contestant_id: string
+          created_at: string
+          event_id: string
+          id: string
+          student_id: string
+        }
+        Insert: {
+          contestant_id: string
+          created_at?: string
+          event_id: string
+          id?: string
+          student_id: string
+        }
+        Update: {
+          contestant_id?: string
+          created_at?: string
+          event_id?: string
+          id?: string
+          student_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_votes_contestant_id_fkey"
+            columns: ["contestant_id"]
+            isOneToOne: false
+            referencedRelation: "event_contestants"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_votes_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "event_votes_student_id_fkey"
+            columns: ["student_id"]
+            isOneToOne: false
+            referencedRelation: "students"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      events: {
+        Row: {
+          banner_image: string | null
+          category: string | null
+          created_at: string
+          description: string | null
+          end_date: string | null
+          id: string
+          min_vote_amount: number
+          payment_currency: string
+          paystack_public_key: string | null
+          paystack_secret_key: string | null
+          start_date: string | null
+          status: Database["public"]["Enums"]["event_status"]
+          title: string
+          updated_at: string
+          vote_conversion_rate: number
+          vote_rule: Database["public"]["Enums"]["event_vote_rule"]
+          voting_type: Database["public"]["Enums"]["event_voting_type"]
+        }
+        Insert: {
+          banner_image?: string | null
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          min_vote_amount?: number
+          payment_currency?: string
+          paystack_public_key?: string | null
+          paystack_secret_key?: string | null
+          start_date?: string | null
+          status?: Database["public"]["Enums"]["event_status"]
+          title: string
+          updated_at?: string
+          vote_conversion_rate?: number
+          vote_rule?: Database["public"]["Enums"]["event_vote_rule"]
+          voting_type?: Database["public"]["Enums"]["event_voting_type"]
+        }
+        Update: {
+          banner_image?: string | null
+          category?: string | null
+          created_at?: string
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          min_vote_amount?: number
+          payment_currency?: string
+          paystack_public_key?: string | null
+          paystack_secret_key?: string | null
+          start_date?: string | null
+          status?: Database["public"]["Enums"]["event_status"]
+          title?: string
+          updated_at?: string
+          vote_conversion_rate?: number
+          vote_rule?: Database["public"]["Enums"]["event_vote_rule"]
+          voting_type?: Database["public"]["Enums"]["event_voting_type"]
+        }
+        Relationships: []
+      }
       payments: {
         Row: {
           amount: number
@@ -146,6 +417,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      students: {
+        Row: {
+          created_at: string
+          date_of_birth: string | null
+          department: string | null
+          email: string
+          first_name: string
+          gender: string | null
+          id: string
+          last_name: string
+          matric_number: string
+          password_hash: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          date_of_birth?: string | null
+          department?: string | null
+          email: string
+          first_name: string
+          gender?: string | null
+          id?: string
+          last_name: string
+          matric_number: string
+          password_hash: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          date_of_birth?: string | null
+          department?: string | null
+          email?: string
+          first_name?: string
+          gender?: string | null
+          id?: string
+          last_name?: string
+          matric_number?: string
+          password_hash?: string
+          updated_at?: string
+        }
+        Relationships: []
       }
       user_roles: {
         Row: {
@@ -216,6 +529,10 @@ export type Database = {
         }
         Returns: boolean
       }
+      increment_event_votes: {
+        Args: { p_contestant_id: string; p_vote_count: number }
+        Returns: undefined
+      }
       increment_votes: {
         Args: { p_contestant_id: string; p_vote_count: number }
         Returns: undefined
@@ -223,6 +540,9 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "user"
+      event_status: "draft" | "live" | "ended"
+      event_vote_rule: "per_contestant" | "per_event"
+      event_voting_type: "monetary" | "free"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -351,6 +671,9 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "user"],
+      event_status: ["draft", "live", "ended"],
+      event_vote_rule: ["per_contestant", "per_event"],
+      event_voting_type: ["monetary", "free"],
     },
   },
 } as const
