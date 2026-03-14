@@ -220,6 +220,7 @@ const AdminDashboard = () => {
         <div className="flex gap-2 mb-6 flex-wrap">
           {([
             { key: "contestants" as const, icon: Users, label: "Contestants" },
+            { key: "events" as const, icon: Calendar, label: "Events" },
             { key: "payments" as const, icon: DollarSign, label: "Payments" },
             { key: "settings" as const, icon: Settings, label: "Settings" },
           ]).map((tab) => (
