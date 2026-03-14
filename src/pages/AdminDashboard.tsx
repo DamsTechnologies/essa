@@ -14,8 +14,9 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-  Users, DollarSign, Trophy, LogOut, Plus, Trash2, Edit, Loader2, Vote, Settings,
+  Users, DollarSign, Trophy, LogOut, Plus, Trash2, Edit, Loader2, Vote, Settings, Calendar,
 } from "lucide-react";
+import EventManager from "@/components/admin/EventManager";
 import { toast } from "sonner";
 
 interface Contestant {
