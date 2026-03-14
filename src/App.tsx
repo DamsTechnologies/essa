@@ -18,6 +18,8 @@ import FashionContest from "./pages/FashionContest";
 import ContestantDetail from "./pages/ContestantDetail";
 import AdminLogin from "./pages/AdminLogin";
 import AdminDashboard from "./pages/AdminDashboard";
+import EventsHub from "./pages/EventsHub";
+import EventDetail from "./pages/EventDetail";
 import NotFound from "./pages/NotFound";
 import ScrollToTop from "./components/ScrollToTop";
 

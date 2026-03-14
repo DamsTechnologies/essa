@@ -301,6 +301,9 @@ const AdminDashboard = () => {
           </Card>
         )}
 
+        {/* Events Tab */}
+        {activeTab === "events" && <EventManager />}
+
         {/* Payments Tab */}
         {activeTab === "payments" && (
           <Card>
