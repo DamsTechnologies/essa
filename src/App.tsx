@@ -48,6 +48,8 @@ const App = () => (
           <Route path="/privacy" element={<PrivacyPolicy />} />
           <Route path="/terms" element={<TermsOfService />} />
           <Route path="/clubs/:slug" element={<ClubDetail />} />
+          <Route path="/events-hub" element={<EventsHub />} />
+          <Route path="/events-hub/:eventId" element={<EventDetail />} />
           <Route path="/admin" element={<AdminLogin />} />
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="*" element={<NotFound />} />
