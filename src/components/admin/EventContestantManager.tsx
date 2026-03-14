@@ -101,7 +101,7 @@ const EventContestantManager = ({ event }: Props) => {
         payload.event_id = event.id;
         if (!imageUrl) { toast.error("Please upload an image"); setSaving(false); return; }
         payload.profile_image = imageUrl;
-        const { error } = await supabase.from("event_contestants").insert(payload);
+        const { error } = await supabase.from("event_contestants").insert([payload] as any);
         if (error) throw error;
         toast.success("Contestant added");
       }

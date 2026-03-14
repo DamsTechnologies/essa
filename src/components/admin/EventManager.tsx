@@ -145,7 +145,7 @@ const EventManager = () => {
         if (error) throw error;
         toast.success("Event updated");
       } else {
-        const { error } = await supabase.from("events").insert(payload);
+        const { error } = await supabase.from("events").insert([payload] as any);
         if (error) throw error;
         toast.success("Event created");
       }
