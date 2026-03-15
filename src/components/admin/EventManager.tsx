@@ -15,7 +15,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Plus, Trash2, Edit, Loader2, Calendar, Users, Eye, EyeOff,
+  Plus, Trash2, Edit, Loader2, Calendar, Users, Eye, EyeOff, TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
 import EventContestantManager from "./EventContestantManager";
