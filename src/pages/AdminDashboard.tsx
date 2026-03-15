@@ -14,9 +14,11 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
 } from "@/components/ui/dialog";
 import {
-  Users, DollarSign, Trophy, LogOut, Plus, Trash2, Edit, Loader2, Vote, Settings, Calendar,
+  Users, DollarSign, Trophy, LogOut, Plus, Trash2, Edit,
+  Loader2, Vote, Settings, Calendar, Shield,
 } from "lucide-react";
 import EventManager from "@/components/admin/EventManager";
+import VoteMonitoringPanel from "@/components/admin/VoteMonitoringPanel"; // ← NEW
 import { toast } from "sonner";
 
 interface Contestant {
@@ -49,7 +51,9 @@ const AdminDashboard = () => {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [contestEnabled, setContestEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"contestants" | "payments" | "settings" | "events">("contestants");
+  const [activeTab, setActiveTab] = useState<
+    "contestants" | "payments" | "settings" | "events" | "monitoring"
+  >("contestants");
 
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [editingContestant, setEditingContestant] = useState<Contestant | null>(null);
@@ -68,8 +72,12 @@ const AdminDashboard = () => {
   const checkAuth = async () => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) { navigate("/admin"); return; }
-    const { data: roles } = await supabase.from("user_roles").select("role").eq("user_id", user.id).eq("role", "admin");
-    if (!roles || roles.length === 0) { await supabase.auth.signOut(); navigate("/admin"); return; }
+    const { data: roles } = await supabase
+      .from("user_roles").select("role")
+      .eq("user_id", user.id).eq("role", "admin");
+    if (!roles || roles.length === 0) {
+      await supabase.auth.signOut(); navigate("/admin"); return;
+    }
     fetchData();
   };
 
@@ -93,7 +101,7 @@ const AdminDashboard = () => {
 
   const handleLogout = async () => { await supabase.auth.signOut(); navigate("/admin"); };
 
-  const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
+  const MAX_FILE_SIZE = 2 * 1024 * 1024;
 
   const uploadImage = async (file: File, prefix: string) => {
     if (file.size > MAX_FILE_SIZE) {
@@ -114,14 +122,11 @@ const AdminDashboard = () => {
   const handleSaveContestant = async () => {
     if (!formName || !formDesignTitle) { toast.error("Name and design title are required"); return; }
     setSaving(true);
-
     try {
       let coverUrl = formCoverImageUrl;
       let profileUrl = formProfileImageUrl;
-
       if (formCoverImage) coverUrl = await uploadImage(formCoverImage, "cover");
       if (formProfileImage) profileUrl = await uploadImage(formProfileImage, "profile");
-
       if (!coverUrl && !editingContestant) { toast.error("Please upload a cover image"); setSaving(false); return; }
 
       if (editingContestant) {
@@ -131,7 +136,6 @@ const AdminDashboard = () => {
         };
         if (coverUrl) updateData.cover_image = coverUrl;
         if (profileUrl) updateData.profile_image = profileUrl;
-
         const { error } = await supabase.from("contestants").update(updateData).eq("id", editingContestant.id);
         if (error) toast.error("Failed to update contestant");
         else toast.success("Contestant updated");
@@ -147,7 +151,6 @@ const AdminDashboard = () => {
     } catch (err: any) {
       toast.error(err?.message || "Failed to upload image");
     }
-
     resetForm();
     fetchData();
     setSaving(false);
@@ -161,7 +164,8 @@ const AdminDashboard = () => {
   };
 
   const handleToggleContest = async (enabled: boolean) => {
-    const { error } = await supabase.from("contest_settings").update({ is_enabled: enabled }).not("id", "is", null);
+    const { error } = await supabase.from("contest_settings")
+      .update({ is_enabled: enabled }).not("id", "is", null);
     if (error) toast.error("Failed to update");
     else { setContestEnabled(enabled); toast.success(enabled ? "Contest enabled" : "Contest disabled"); }
   };
@@ -179,7 +183,9 @@ const AdminDashboard = () => {
     setShowAddDialog(true);
   };
 
-  const totalFunds = payments.filter(p => p.payment_status === "verified").reduce((sum, p) => sum + p.amount, 0);
+  const totalFunds = payments
+    .filter(p => p.payment_status === "verified")
+    .reduce((sum, p) => sum + p.amount, 0);
   const totalVotes = contestants.reduce((sum, c) => sum + c.total_votes, 0);
 
   if (loading) {
@@ -194,12 +200,14 @@ const AdminDashboard = () => {
     <div className="min-h-screen bg-muted/30">
       <header className="bg-primary text-primary-foreground py-4 px-6 flex items-center justify-between">
         <h1 className="font-heading font-bold text-xl">Contest Admin Panel</h1>
-        <Button variant="ghost" size="sm" onClick={handleLogout} className="text-primary-foreground hover:text-primary-foreground/80">
+        <Button variant="ghost" size="sm" onClick={handleLogout}
+          className="text-primary-foreground hover:text-primary-foreground/80">
           <LogOut className="h-4 w-4 mr-2" /> Logout
         </Button>
       </header>
 
       <div className="container max-w-screen-xl py-6 px-4">
+
         {/* Stats */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
           <Card><CardContent className="flex items-center gap-4 p-6">
@@ -216,15 +224,21 @@ const AdminDashboard = () => {
           </CardContent></Card>
         </div>
 
-        {/* Tabs */}
+        {/* ── Tabs ──────────────────────────────────────────────────────────── */}
         <div className="flex gap-2 mb-6 flex-wrap">
           {([
             { key: "contestants" as const, icon: Users, label: "Contestants" },
             { key: "events" as const, icon: Calendar, label: "Events" },
             { key: "payments" as const, icon: DollarSign, label: "Payments" },
+            { key: "monitoring" as const, icon: Shield, label: "Vote Monitoring" }, // ← NEW
             { key: "settings" as const, icon: Settings, label: "Settings" },
           ]).map((tab) => (
-            <Button key={tab.key} variant={activeTab === tab.key ? "default" : "outline"} onClick={() => setActiveTab(tab.key)} size="sm">
+            <Button
+              key={tab.key}
+              variant={activeTab === tab.key ? "default" : "outline"}
+              onClick={() => setActiveTab(tab.key)}
+              size="sm"
+            >
               <tab.icon className="h-4 w-4 mr-1" />{tab.label}
             </Button>
           ))}
@@ -304,6 +318,9 @@ const AdminDashboard = () => {
         {/* Events Tab */}
         {activeTab === "events" && <EventManager />}
 
+        {/* Vote Monitoring Tab — NEW */}
+        {activeTab === "monitoring" && <VoteMonitoringPanel />}
+
         {/* Payments Tab */}
         {activeTab === "payments" && (
           <Card>
@@ -337,7 +354,9 @@ const AdminDashboard = () => {
                             : "bg-yellow-100 text-yellow-700"
                           }`}>{p.payment_status}</span>
                         </TableCell>
-                        <TableCell className="text-xs text-muted-foreground font-mono">{p.transaction_reference.slice(0, 20)}...</TableCell>
+                        <TableCell className="text-xs text-muted-foreground font-mono">
+                          {p.transaction_reference.slice(0, 20)}...
+                        </TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -355,7 +374,9 @@ const AdminDashboard = () => {
               <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
                 <div>
                   <p className="font-medium">Contest Voting</p>
-                  <p className="text-sm text-muted-foreground">{contestEnabled ? "Voting is currently open" : "Voting is currently closed"}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {contestEnabled ? "Voting is currently open" : "Voting is currently closed"}
+                  </p>
                 </div>
                 <Switch checked={contestEnabled} onCheckedChange={handleToggleContest} />
               </div>
@@ -372,6 +393,7 @@ const AdminDashboard = () => {
             </CardContent>
           </Card>
         )}
+
       </div>
     </div>
   );

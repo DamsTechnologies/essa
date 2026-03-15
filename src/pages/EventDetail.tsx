@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import StudentAuthModal from "@/components/events/StudentAuthModal";
 import EventVotingModal from "@/components/events/EventVotingModal";
 import EventContestantCard from "@/components/events/EventContestantCard";
+import VotingTransparencyWidget from "@/components/events/VotingTransparencyWidget"; // ← NEW
 
 interface EventData {
   id: string;
@@ -66,7 +67,6 @@ const EventDetail = () => {
   useEffect(() => {
     if (searchParams.get("payment") === "success") {
       toast.success("Payment successful! Votes have been added.");
-      // Clean URL
       window.history.replaceState({}, "", `/events-hub/${eventId}`);
     }
   }, [searchParams, eventId]);
@@ -135,7 +135,6 @@ const EventDetail = () => {
       return;
     }
 
-    // Free voting - need student auth
     if (!student) {
       setPendingVoteContestant(contestant);
       setShowAuthModal(true);
@@ -148,7 +147,6 @@ const EventDetail = () => {
   const castFreeVote = async (contestant: EventContestant) => {
     if (!student || !eventId) return;
 
-    // Client-side check
     if (event?.vote_rule === "per_event" && votedInEvent) {
       toast.error("You have already voted in this event");
       return;
@@ -176,7 +174,6 @@ const EventDetail = () => {
     }
   };
 
-  // After auth modal closes with a pending vote
   useEffect(() => {
     if (student && pendingVoteContestant) {
       castFreeVote(pendingVoteContestant);
@@ -287,6 +284,17 @@ const EventDetail = () => {
               </div>
             )}
           </div>
+        </div>
+      </section>
+
+      {/* ── TRANSPARENCY WIDGET ─────────────────────────────────────────────── */}
+      <section className="py-6 border-b border-border bg-muted/20">
+        <div className="container max-w-screen-xl px-4">
+          <VotingTransparencyWidget
+            eventId={eventId!}
+            votingType={event.voting_type}
+            isLive={isLive}
+          />
         </div>
       </section>
 
