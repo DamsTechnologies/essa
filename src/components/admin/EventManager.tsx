@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import EventContestantManager from "./EventContestantManager";
+import EventAnalytics from "./EventAnalytics";
 
 interface Event {
   id: string;

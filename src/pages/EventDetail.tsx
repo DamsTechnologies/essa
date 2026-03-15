@@ -1,15 +1,19 @@
-import { useState, useEffect } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useState, useEffect, useCallback } from "react";
+import { useParams, Link, useSearchParams } from "react-router-dom";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { supabase } from "@/integrations/supabase/client";
 import { useSEO } from "@/hooks/useSEO";
+import { useStudentAuth } from "@/hooks/useStudentAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Heart, Trophy, ArrowLeft, Vote } from "lucide-react";
+import { Heart, Trophy, ArrowLeft, Vote, LogOut, DollarSign } from "lucide-react";
 import { toast } from "sonner";
+import StudentAuthModal from "@/components/events/StudentAuthModal";
+import EventVotingModal from "@/components/events/EventVotingModal";
+import EventContestantCard from "@/components/events/EventContestantCard";
 
 interface EventData {
   id: string;
@@ -22,6 +26,9 @@ interface EventData {
   vote_rule: "per_contestant" | "per_event";
   start_date: string | null;
   end_date: string | null;
+  min_vote_amount: number;
+  vote_conversion_rate: number;
+  payment_currency: string;
 }
 
 interface EventContestant {
@@ -36,9 +43,18 @@ interface EventContestant {
 
 const EventDetail = () => {
   const { eventId } = useParams();
+  const [searchParams] = useSearchParams();
   const [event, setEvent] = useState<EventData | null>(null);
   const [contestants, setContestants] = useState<EventContestant[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [votingContestant, setVotingContestant] = useState<EventContestant | null>(null);
+  const [showMonetaryModal, setShowMonetaryModal] = useState(false);
+  const [pendingVoteContestant, setPendingVoteContestant] = useState<EventContestant | null>(null);
+  const [votedContestants, setVotedContestants] = useState<Set<string>>(new Set());
+  const [votedInEvent, setVotedInEvent] = useState(false);
+
+  const { student, login, signup, logout } = useStudentAuth();
 
   useSEO({
     title: event ? `${event.title} — ESSA` : "Event — ESSA",
@@ -46,36 +62,127 @@ const EventDetail = () => {
     url: `https://theessa.vercel.app/events-hub/${eventId}`,
   });
 
+  // Check for payment success redirect
+  useEffect(() => {
+    if (searchParams.get("payment") === "success") {
+      toast.success("Payment successful! Votes have been added.");
+      // Clean URL
+      window.history.replaceState({}, "", `/events-hub/${eventId}`);
+    }
+  }, [searchParams, eventId]);
+
+  const fetchContestants = useCallback(async () => {
+    if (!eventId) return;
+    const { data } = await supabase
+      .from("event_contestants")
+      .select("*")
+      .eq("event_id", eventId)
+      .eq("is_active", true)
+      .order("total_votes", { ascending: false });
+    if (data) setContestants(data as EventContestant[]);
+  }, [eventId]);
+
   useEffect(() => {
     if (!eventId) return;
     const fetchEvent = async () => {
-      const [eventRes, contestantsRes] = await Promise.all([
-        supabase.from("events").select("*").eq("id", eventId).single(),
-        supabase.from("event_contestants").select("*").eq("event_id", eventId).eq("is_active", true).order("total_votes", { ascending: false }),
-      ]);
-      if (eventRes.data) setEvent(eventRes.data as EventData);
-      if (contestantsRes.data) setContestants(contestantsRes.data as EventContestant[]);
+      const { data: eventData } = await supabase.from("events").select("*").eq("id", eventId).single();
+      if (eventData) setEvent(eventData as EventData);
       setLoading(false);
     };
     fetchEvent();
+    fetchContestants();
 
-    // Realtime updates for contestants
+    // Realtime
     const channel = supabase
       .channel(`event-contestants-${eventId}`)
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "event_contestants", filter: `event_id=eq.${eventId}` },
         (payload) => {
-          setContestants((prev) => prev.map((c) => c.id === payload.new.id ? { ...c, total_votes: (payload.new as any).total_votes } : c));
-        }
-      )
+          setContestants((prev) =>
+            prev.map((c) => c.id === payload.new.id ? { ...c, total_votes: (payload.new as any).total_votes } : c)
+              .sort((a, b) => b.total_votes - a.total_votes)
+          );
+        })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "event_contestants", filter: `event_id=eq.${eventId}` },
+        () => { fetchContestants(); })
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
-  }, [eventId]);
+  }, [eventId, fetchContestants]);
 
-  const handleFreeVote = async (contestant: EventContestant) => {
-    // Phase 2: This will require student authentication
-    toast.info("Student login required for free voting. Coming soon!");
+  // Check which contestants student already voted for
+  useEffect(() => {
+    if (!student || !eventId || !event || event.voting_type !== "free") return;
+    const checkVotes = async () => {
+      const { data } = await supabase
+        .from("event_votes")
+        .select("contestant_id")
+        .eq("student_id", student.id)
+        .eq("event_id", eventId);
+      if (data) {
+        setVotedContestants(new Set(data.map(v => v.contestant_id)));
+        setVotedInEvent(data.length > 0);
+      }
+    };
+    checkVotes();
+  }, [student, eventId, event]);
+
+  const handleVote = (contestant: EventContestant) => {
+    if (!event || event.status !== "live") return;
+
+    if (event.voting_type === "monetary") {
+      setVotingContestant(contestant);
+      setShowMonetaryModal(true);
+      return;
+    }
+
+    // Free voting - need student auth
+    if (!student) {
+      setPendingVoteContestant(contestant);
+      setShowAuthModal(true);
+      return;
+    }
+
+    castFreeVote(contestant);
   };
+
+  const castFreeVote = async (contestant: EventContestant) => {
+    if (!student || !eventId) return;
+
+    // Client-side check
+    if (event?.vote_rule === "per_event" && votedInEvent) {
+      toast.error("You have already voted in this event");
+      return;
+    }
+    if (event?.vote_rule === "per_contestant" && votedContestants.has(contestant.id)) {
+      toast.error("You have already voted for this contestant");
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.functions.invoke("event-free-vote", {
+        body: { student_id: student.id, contestant_id: contestant.id, event_id: eventId },
+      });
+
+      if (error || data?.error) {
+        toast.error(data?.error || "Failed to cast vote");
+        return;
+      }
+
+      toast.success(`Vote cast for ${contestant.name}!`);
+      setVotedContestants(prev => new Set([...prev, contestant.id]));
+      setVotedInEvent(true);
+    } catch {
+      toast.error("Something went wrong");
+    }
+  };
+
+  // After auth modal closes with a pending vote
+  useEffect(() => {
+    if (student && pendingVoteContestant) {
+      castFreeVote(pendingVoteContestant);
+      setPendingVoteContestant(null);
+    }
+  }, [student, pendingVoteContestant]);
 
   if (loading) {
     return (
@@ -108,6 +215,7 @@ const EventDetail = () => {
 
   const topContestants = [...contestants].sort((a, b) => b.total_votes - a.total_votes).slice(0, 3);
   const isLive = event.status === "live";
+  const totalVotes = contestants.reduce((sum, c) => sum + c.total_votes, 0);
 
   return (
     <div className="min-h-screen bg-background">
@@ -128,28 +236,63 @@ const EventDetail = () => {
               <ArrowLeft className="h-4 w-4" /> All Events
             </Link>
             <h1 className="font-heading font-bold text-3xl md:text-5xl text-white">{event.title}</h1>
-            <div className="flex gap-2 mt-2">
+            <div className="flex gap-2 mt-2 flex-wrap">
               <Badge variant={isLive ? "default" : "secondary"}>{event.status}</Badge>
               <Badge variant="outline" className="text-white border-white/30">
                 {event.voting_type === "monetary" ? "Paid Voting" : "Free Voting"}
               </Badge>
+              {event.category && <Badge variant="outline" className="text-white border-white/30">{event.category}</Badge>}
             </div>
           </div>
         </div>
       </section>
 
-      {/* Description */}
-      {event.description && (
-        <section className="py-6 border-b border-border">
-          <div className="container max-w-screen-xl px-4">
-            <p className="text-muted-foreground max-w-3xl">{event.description}</p>
+      {/* Student auth bar for free events */}
+      {event.voting_type === "free" && (
+        <div className="border-b border-border bg-muted/50">
+          <div className="container max-w-screen-xl px-4 py-3 flex items-center justify-between">
+            {student ? (
+              <div className="flex items-center gap-3">
+                <p className="text-sm text-foreground">
+                  Logged in as <span className="font-medium">{student.first_name} {student.last_name}</span>
+                </p>
+                <Button variant="ghost" size="sm" onClick={logout}>
+                  <LogOut className="h-3 w-3 mr-1" /> Logout
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3">
+                <p className="text-sm text-muted-foreground">Sign in to vote</p>
+                <Button size="sm" onClick={() => setShowAuthModal(true)}>Sign In / Register</Button>
+              </div>
+            )}
           </div>
-        </section>
+        </div>
       )}
+
+      {/* Description & Stats */}
+      <section className="py-6 border-b border-border">
+        <div className="container max-w-screen-xl px-4">
+          {event.description && <p className="text-muted-foreground max-w-3xl mb-4">{event.description}</p>}
+          <div className="flex gap-6 text-sm">
+            <div className="flex items-center gap-1 text-muted-foreground">
+              <Vote className="h-4 w-4" /> {totalVotes.toLocaleString()} total votes
+            </div>
+            <div className="flex items-center gap-1 text-muted-foreground">
+              <Trophy className="h-4 w-4" /> {contestants.length} contestants
+            </div>
+            {event.voting_type === "monetary" && (
+              <div className="flex items-center gap-1 text-muted-foreground">
+                <DollarSign className="h-4 w-4" /> ₦{event.vote_conversion_rate} per vote
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
 
       {/* Leaderboard */}
       {topContestants.length > 0 && (
-        <section className="py-8">
+        <section id="leaderboard" className="py-8">
           <div className="container max-w-screen-xl px-4">
             <h2 className="text-2xl font-heading font-bold text-primary mb-4 flex items-center gap-2">
               <Trophy className="h-6 w-6 text-accent" /> Leaderboard
@@ -185,37 +328,41 @@ const EventDetail = () => {
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 md:gap-6">
               {contestants.map((c) => (
-                <Card key={c.id} className="group overflow-hidden hover:shadow-card transition-all duration-300">
-                  <div className="relative">
-                    {c.profile_image ? (
-                      <img src={c.profile_image} alt={c.name} className="w-full aspect-[3/4] object-cover group-hover:scale-105 transition-transform duration-500" loading="lazy" />
-                    ) : (
-                      <div className="w-full aspect-[3/4] bg-muted flex items-center justify-center">
-                        <span className="text-4xl font-bold text-muted-foreground/30">{c.name.charAt(0)}</span>
-                      </div>
-                    )}
-                    <div className="absolute top-2 right-2 bg-primary/90 text-primary-foreground rounded-full px-2 py-0.5 text-xs font-bold backdrop-blur-sm">
-                      {c.total_votes.toLocaleString()} votes
-                    </div>
-                  </div>
-                  <CardContent className="p-3 md:p-4">
-                    <h3 className="font-heading font-bold text-sm md:text-lg text-foreground truncate">{c.name}</h3>
-                    {c.department && <p className="text-xs text-muted-foreground truncate">{c.department}</p>}
-                    <Button
-                      className="w-full mt-2 bg-accent text-accent-foreground hover:bg-accent/90 text-sm h-9 md:h-10"
-                      onClick={() => handleFreeVote(c)}
-                      disabled={!isLive}
-                    >
-                      <Heart className="h-4 w-4 mr-1" />
-                      {isLive ? "Vote" : "Ended"}
-                    </Button>
-                  </CardContent>
-                </Card>
+                <EventContestantCard
+                  key={c.id}
+                  contestant={c}
+                  eventId={eventId!}
+                  isLive={isLive}
+                  onVote={handleVote}
+                />
               ))}
             </div>
           )}
         </div>
       </section>
+
+      {/* Auth Modal */}
+      <StudentAuthModal
+        isOpen={showAuthModal}
+        onClose={() => { setShowAuthModal(false); setPendingVoteContestant(null); }}
+        onLogin={login}
+        onSignup={signup}
+      />
+
+      {/* Monetary Voting Modal */}
+      {event.voting_type === "monetary" && (
+        <EventVotingModal
+          contestant={votingContestant}
+          event={{
+            id: event.id,
+            min_vote_amount: event.min_vote_amount,
+            vote_conversion_rate: event.vote_conversion_rate,
+            payment_currency: event.payment_currency,
+          }}
+          isOpen={showMonetaryModal}
+          onClose={() => { setShowMonetaryModal(false); setVotingContestant(null); }}
+        />
+      )}
 
       <Footer />
     </div>
