@@ -46,6 +46,7 @@ const EventManager = () => {
   const [showDialog, setShowDialog] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [managingEvent, setManagingEvent] = useState<Event | null>(null);
+  const [analyticsEvent, setAnalyticsEvent] = useState<Event | null>(null);
   const [saving, setSaving] = useState(false);
 
   // Form state
