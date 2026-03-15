@@ -182,43 +182,68 @@ const EventContestantDetail = () => {
     if (!eventId || !contestantSlug) return;
 
     const fetchAll = async () => {
-      const [eventRes, contestantRes] = await Promise.all([
-        supabase.from("events").select("id, title, voting_type, status").eq("id", eventId).single(),
-        supabase.from("event_contestants").select("*").eq("event_id", eventId)
-          .or(`slug.eq.${contestantSlug},id.eq.${contestantSlug}`).single(),
-      ]);
+      // ── Fetch event ──────────────────────────────────────────────────────
+      const { data: eventData } = await supabase
+        .from("events")
+        .select("id, title, voting_type, status")
+        .eq("id", eventId)
+        .single();
 
-      if (eventRes.data) setEvent(eventRes.data as EventData);
-      if (contestantRes.data) {
-        const c = contestantRes.data as ContestantData;
-        setContestant(c);
+      if (eventData) setEvent(eventData as EventData);
 
-        // Fetch media for this contestant
+      // ── Fetch contestant: try by slug first, then fall back to id ────────
+      let contestantData: ContestantData | null = null;
+
+      const { data: bySlug } = await supabase
+        .from("event_contestants")
+        .select("*")
+        .eq("event_id", eventId)
+        .eq("slug", contestantSlug)
+        .maybeSingle();
+
+      if (bySlug) {
+        contestantData = bySlug as ContestantData;
+      } else {
+        // fallback: maybe the URL param is actually the UUID
+        const { data: byId } = await supabase
+          .from("event_contestants")
+          .select("*")
+          .eq("event_id", eventId)
+          .eq("id", contestantSlug)
+          .maybeSingle();
+
+        if (byId) contestantData = byId as ContestantData;
+      }
+
+      if (contestantData) {
+        setContestant(contestantData);
+
+        // ── Fetch media ────────────────────────────────────────────────────
         const { data: mediaData } = await supabase
           .from("contestant_media")
           .select("*")
-          .eq("contestant_id", c.id)
+          .eq("contestant_id", contestantData.id)
           .order("sort_order", { ascending: true });
 
         if (mediaData && mediaData.length > 0) {
           setMedia(mediaData as MediaItem[]);
         } else {
-          // Fallback: build media from profile_image + video_url
+          // Fallback: build media from profile_image + video_url fields
           const fallback: MediaItem[] = [];
-          if (c.profile_image) {
+          if (contestantData.profile_image) {
             fallback.push({
               id: "fallback-img",
               media_type: "image",
-              url: c.profile_image,
+              url: contestantData.profile_image,
               is_primary: true,
               sort_order: 0,
             });
           }
-          if (c.video_url) {
+          if (contestantData.video_url) {
             fallback.push({
               id: "fallback-vid",
               media_type: "video",
-              url: c.video_url,
+              url: contestantData.video_url,
               is_primary: false,
               sort_order: 1,
             });
@@ -226,12 +251,13 @@ const EventContestantDetail = () => {
           setMedia(fallback);
         }
       }
+
       setLoading(false);
     };
 
     fetchAll();
 
-    // Realtime vote updates
+    // ── Realtime vote count updates ──────────────────────────────────────
     const channel = supabase
       .channel(`event-contestant-${contestantSlug}`)
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "event_contestants" },
