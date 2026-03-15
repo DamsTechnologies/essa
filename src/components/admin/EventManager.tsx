@@ -320,6 +320,9 @@ const EventManager = () => {
                         <Button size="sm" variant="outline" onClick={() => setManagingEvent(e)}>
                           <Users className="h-3 w-3 mr-1" /> Contestants
                         </Button>
+                        <Button size="sm" variant="outline" onClick={() => setAnalyticsEvent(e)}>
+                          <TrendingUp className="h-3 w-3 mr-1" /> Analytics
+                        </Button>
                         {e.status === "draft" && (
                           <Button size="sm" variant="default" onClick={() => handleStatusChange(e, "live")}>
                             <Eye className="h-3 w-3 mr-1" /> Activate
