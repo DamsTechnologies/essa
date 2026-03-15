@@ -15,10 +15,11 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Plus, Trash2, Edit, Loader2, Calendar, Users, Eye, EyeOff,
+  Plus, Trash2, Edit, Loader2, Calendar, Users, Eye, EyeOff, TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
 import EventContestantManager from "./EventContestantManager";
+import EventAnalytics from "./EventAnalytics";
 
 interface Event {
   id: string;
@@ -45,6 +46,7 @@ const EventManager = () => {
   const [showDialog, setShowDialog] = useState(false);
   const [editingEvent, setEditingEvent] = useState<Event | null>(null);
   const [managingEvent, setManagingEvent] = useState<Event | null>(null);
+  const [analyticsEvent, setAnalyticsEvent] = useState<Event | null>(null);
   const [saving, setSaving] = useState(false);
 
   // Form state
@@ -180,6 +182,17 @@ const EventManager = () => {
     return <span className={`px-2 py-1 rounded-full text-xs font-medium ${colors[status] || ""}`}>{status}</span>;
   };
 
+  if (analyticsEvent) {
+    return (
+      <div>
+        <Button variant="outline" size="sm" className="mb-4" onClick={() => setAnalyticsEvent(null)}>
+          ← Back to Events
+        </Button>
+        <EventAnalytics eventId={analyticsEvent.id} eventTitle={analyticsEvent.title} votingType={analyticsEvent.voting_type} />
+      </div>
+    );
+  }
+
   if (managingEvent) {
     return (
       <div>
@@ -306,6 +319,9 @@ const EventManager = () => {
                       <div className="flex gap-1 flex-wrap">
                         <Button size="sm" variant="outline" onClick={() => setManagingEvent(e)}>
                           <Users className="h-3 w-3 mr-1" /> Contestants
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => setAnalyticsEvent(e)}>
+                          <TrendingUp className="h-3 w-3 mr-1" /> Analytics
                         </Button>
                         {e.status === "draft" && (
                           <Button size="sm" variant="default" onClick={() => handleStatusChange(e, "live")}>
