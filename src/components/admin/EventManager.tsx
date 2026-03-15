@@ -182,6 +182,17 @@ const EventManager = () => {
     return <span className={`px-2 py-1 rounded-full text-xs font-medium ${colors[status] || ""}`}>{status}</span>;
   };
 
+  if (analyticsEvent) {
+    return (
+      <div>
+        <Button variant="outline" size="sm" className="mb-4" onClick={() => setAnalyticsEvent(null)}>
+          ← Back to Events
+        </Button>
+        <EventAnalytics eventId={analyticsEvent.id} eventTitle={analyticsEvent.title} votingType={analyticsEvent.voting_type} />
+      </div>
+    );
+  }
+
   if (managingEvent) {
     return (
       <div>
