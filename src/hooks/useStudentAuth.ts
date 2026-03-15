@@ -29,6 +29,9 @@ interface SignupData {
   password: string;
 }
 
+// ─── Matric format: 2 digits + 2 uppercase letters + 9 digits = 13 chars
+const MATRIC_REGEX = /^\d{2}[A-Z]{2}\d{9}$/;
+
 const STORAGE_KEY = "essa_student_session";
 
 export function useStudentAuth(): StudentAuth {
@@ -61,8 +64,26 @@ export function useStudentAuth(): StudentAuth {
   }, []);
 
   const signup = useCallback(async (signupData: SignupData) => {
+    const matric = signupData.matric_number.trim().toUpperCase();
+
+    // ── Step 1: Client-side format check (defence in depth) ──────────────────
+    if (!MATRIC_REGEX.test(matric)) {
+      return { error: "Invalid matriculation number format" };
+    }
+
+    // ── Step 2: Whitelist check via Supabase ──────────────────────────────────
+    // The student_whitelist table is readable only via service role (edge function),
+    // but we can do a lightweight check here. If the table has RLS for anon reads,
+    // the check happens server-side in student-auth edge function instead.
+    // We pass it through and let the edge function be the authoritative gate.
+
+    // ── Step 3: Call edge function (server is the final authority) ────────────
     const { data, error } = await supabase.functions.invoke("student-auth", {
-      body: { action: "signup", ...signupData },
+      body: {
+        action: "signup",
+        ...signupData,
+        matric_number: matric, // always pass normalized uppercase
+      },
     });
 
     if (error || data?.error) {
