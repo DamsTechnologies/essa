@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -15,7 +16,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import {
-  Plus, Trash2, Edit, Loader2, Calendar, Users, Eye, EyeOff, TrendingUp,
+  Plus, Trash2, Edit, Loader2, Calendar, Users, Eye, EyeOff,
+  TrendingUp, DollarSign,
 } from "lucide-react";
 import { toast } from "sonner";
 import EventContestantManager from "./EventContestantManager";
@@ -37,6 +39,7 @@ interface Event {
   payment_currency: string;
   min_vote_amount: number;
   vote_conversion_rate: number;
+  show_funds_raised: boolean; // ← per-event admin-controlled toggle
   created_at: string;
 }
 
@@ -49,7 +52,7 @@ const EventManager = () => {
   const [analyticsEvent, setAnalyticsEvent] = useState<Event | null>(null);
   const [saving, setSaving] = useState(false);
 
-  // Form state
+  // Form fields
   const [formTitle, setFormTitle] = useState("");
   const [formDescription, setFormDescription] = useState("");
   const [formCategory, setFormCategory] = useState("");
@@ -59,12 +62,12 @@ const EventManager = () => {
   const [formEndDate, setFormEndDate] = useState("");
   const [formBannerImage, setFormBannerImage] = useState<File | null>(null);
   const [formBannerUrl, setFormBannerUrl] = useState("");
-  // Monetary config
   const [formPaystackPublicKey, setFormPaystackPublicKey] = useState("");
   const [formPaystackSecretKey, setFormPaystackSecretKey] = useState("");
   const [formCurrency, setFormCurrency] = useState("NGN");
   const [formMinAmount, setFormMinAmount] = useState("100");
   const [formConversionRate, setFormConversionRate] = useState("100");
+  const [formShowFundsRaised, setFormShowFundsRaised] = useState(true);
 
   useEffect(() => { fetchEvents(); }, []);
 
@@ -86,6 +89,7 @@ const EventManager = () => {
     setFormBannerImage(null); setFormBannerUrl("");
     setFormPaystackPublicKey(""); setFormPaystackSecretKey("");
     setFormCurrency("NGN"); setFormMinAmount("100"); setFormConversionRate("100");
+    setFormShowFundsRaised(true);
     setEditingEvent(null); setShowDialog(false);
   };
 
@@ -104,6 +108,7 @@ const EventManager = () => {
     setFormCurrency(e.payment_currency);
     setFormMinAmount(String(e.min_vote_amount));
     setFormConversionRate(String(e.vote_conversion_rate));
+    setFormShowFundsRaised(e.show_funds_raised ?? true);
     setShowDialog(true);
   };
 
@@ -114,10 +119,13 @@ const EventManager = () => {
     try {
       let bannerUrl = formBannerUrl;
       if (formBannerImage) {
-        if (formBannerImage.size > 2 * 1024 * 1024) { toast.error("Banner image must be under 2MB"); setSaving(false); return; }
+        if (formBannerImage.size > 2 * 1024 * 1024) {
+          toast.error("Banner image must be under 2MB"); setSaving(false); return;
+        }
         const ext = formBannerImage.name.split(".").pop();
         const fileName = `event_banner_${Date.now()}.${ext}`;
-        const { error: uploadError } = await supabase.storage.from("contestant-images").upload(fileName, formBannerImage);
+        const { error: uploadError } = await supabase.storage
+          .from("contestant-images").upload(fileName, formBannerImage);
         if (uploadError) throw uploadError;
         const { data: pub } = supabase.storage.from("contestant-images").getPublicUrl(fileName);
         bannerUrl = pub.publicUrl;
@@ -135,6 +143,7 @@ const EventManager = () => {
         payment_currency: formCurrency,
         min_vote_amount: parseInt(formMinAmount) || 100,
         vote_conversion_rate: parseInt(formConversionRate) || 100,
+        show_funds_raised: formShowFundsRaised,
       };
 
       if (formVotingType === "monetary") {
@@ -163,7 +172,28 @@ const EventManager = () => {
   const handleStatusChange = async (event: Event, newStatus: "draft" | "live" | "ended") => {
     const { error } = await supabase.from("events").update({ status: newStatus }).eq("id", event.id);
     if (error) toast.error("Failed to update status");
-    else { toast.success(`Event ${newStatus === "live" ? "activated" : newStatus}`); fetchEvents(); }
+    else {
+      toast.success(`Event ${newStatus === "live" ? "activated" : newStatus}`);
+      fetchEvents();
+    }
+  };
+
+  // ── Toggle show_funds_raised directly from the table ──────────────────────
+  const handleToggleFundsRaised = async (event: Event) => {
+    const newValue = !event.show_funds_raised;
+    const { error } = await supabase
+      .from("events")
+      .update({ show_funds_raised: newValue })
+      .eq("id", event.id);
+
+    if (error) { toast.error("Failed to update"); return; }
+
+    toast.success(
+      newValue
+        ? `Funds raised amount is now visible on ${event.title}`
+        : `Funds raised amount is now hidden on ${event.title}`
+    );
+    fetchEvents();
   };
 
   const handleDelete = async (id: string) => {
@@ -179,7 +209,11 @@ const EventManager = () => {
       live: "bg-green-100 text-green-700",
       ended: "bg-red-100 text-red-700",
     };
-    return <span className={`px-2 py-1 rounded-full text-xs font-medium ${colors[status] || ""}`}>{status}</span>;
+    return (
+      <span className={`px-2 py-1 rounded-full text-xs font-medium ${colors[status] || ""}`}>
+        {status}
+      </span>
+    );
   };
 
   if (analyticsEvent) {
@@ -188,7 +222,11 @@ const EventManager = () => {
         <Button variant="outline" size="sm" className="mb-4" onClick={() => setAnalyticsEvent(null)}>
           ← Back to Events
         </Button>
-        <EventAnalytics eventId={analyticsEvent.id} eventTitle={analyticsEvent.title} votingType={analyticsEvent.voting_type} />
+        <EventAnalytics
+          eventId={analyticsEvent.id}
+          eventTitle={analyticsEvent.title}
+          votingType={analyticsEvent.voting_type}
+        />
       </div>
     );
   }
@@ -205,13 +243,19 @@ const EventManager = () => {
   }
 
   if (loading) {
-    return <div className="flex justify-center py-12"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>;
+    return (
+      <div className="flex justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
   }
 
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between">
-        <CardTitle className="flex items-center gap-2"><Calendar className="h-5 w-5" /> Event Management</CardTitle>
+        <CardTitle className="flex items-center gap-2">
+          <Calendar className="h-5 w-5" /> Event Management
+        </CardTitle>
         <Dialog open={showDialog} onOpenChange={(open) => { if (!open) resetForm(); setShowDialog(open); }}>
           <DialogTrigger asChild>
             <Button size="sm"><Plus className="h-4 w-4 mr-1" /> Create Event</Button>
@@ -221,18 +265,41 @@ const EventManager = () => {
               <DialogTitle>{editingEvent ? "Edit" : "Create"} Event</DialogTitle>
             </DialogHeader>
             <div className="space-y-4">
-              <div><Label>Event Title *</Label><Input value={formTitle} onChange={(e) => setFormTitle(e.target.value)} maxLength={200} placeholder="e.g. Best Native Dressed 2026" /></div>
-              <div><Label>Description</Label><Textarea value={formDescription} onChange={(e) => setFormDescription(e.target.value)} maxLength={2000} rows={3} placeholder="Describe the event..." /></div>
-              <div><Label>Category</Label><Input value={formCategory} onChange={(e) => setFormCategory(e.target.value)} maxLength={100} placeholder="e.g. Fashion, Talent, Cultural" /></div>
+              <div>
+                <Label>Event Title *</Label>
+                <Input value={formTitle} onChange={(e) => setFormTitle(e.target.value)} maxLength={200}
+                  placeholder="e.g. Best Native Dressed 2026" />
+              </div>
+              <div>
+                <Label>Description</Label>
+                <Textarea value={formDescription} onChange={(e) => setFormDescription(e.target.value)}
+                  maxLength={2000} rows={3} placeholder="Describe the event..." />
+              </div>
+              <div>
+                <Label>Category</Label>
+                <Input value={formCategory} onChange={(e) => setFormCategory(e.target.value)}
+                  maxLength={100} placeholder="e.g. Fashion, Talent, Cultural" />
+              </div>
               <div>
                 <Label>Banner Image</Label>
-                <Input type="file" accept="image/jpeg,image/png,image/webp" onChange={(e) => setFormBannerImage(e.target.files?.[0] || null)} />
-                {formBannerUrl && !formBannerImage && <img src={formBannerUrl} alt="Banner" className="mt-2 h-20 rounded object-cover w-full" />}
+                <Input type="file" accept="image/jpeg,image/png,image/webp"
+                  onChange={(e) => setFormBannerImage(e.target.files?.[0] || null)} />
+                {formBannerUrl && !formBannerImage && (
+                  <img src={formBannerUrl} alt="Banner" className="mt-2 h-20 rounded object-cover w-full" />
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
-                <div><Label>Start Date</Label><Input type="datetime-local" value={formStartDate} onChange={(e) => setFormStartDate(e.target.value)} /></div>
-                <div><Label>End Date</Label><Input type="datetime-local" value={formEndDate} onChange={(e) => setFormEndDate(e.target.value)} /></div>
+                <div>
+                  <Label>Start Date</Label>
+                  <Input type="datetime-local" value={formStartDate}
+                    onChange={(e) => setFormStartDate(e.target.value)} />
+                </div>
+                <div>
+                  <Label>End Date</Label>
+                  <Input type="datetime-local" value={formEndDate}
+                    onChange={(e) => setFormEndDate(e.target.value)} />
+                </div>
               </div>
 
               <div>
@@ -249,7 +316,10 @@ const EventManager = () => {
               {formVotingType === "free" && (
                 <div>
                   <Label>Vote Rule</Label>
-                  <Select value={formVoteRule} onValueChange={(v: "per_contestant" | "per_event") => setFormVoteRule(v)}>
+                  <Select
+                    value={formVoteRule}
+                    onValueChange={(v: "per_contestant" | "per_event") => setFormVoteRule(v)}
+                  >
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="per_contestant">One vote per contestant</SelectItem>
@@ -262,12 +332,45 @@ const EventManager = () => {
               {formVotingType === "monetary" && (
                 <div className="space-y-4 p-4 bg-muted rounded-lg">
                   <p className="text-sm font-medium text-foreground">Payment Configuration</p>
-                  <div><Label>Paystack Public Key</Label><Input value={formPaystackPublicKey} onChange={(e) => setFormPaystackPublicKey(e.target.value)} placeholder="pk_live_..." /></div>
-                  <div><Label>Paystack Secret Key</Label><Input type="password" value={formPaystackSecretKey} onChange={(e) => setFormPaystackSecretKey(e.target.value)} placeholder="sk_live_..." /></div>
+                  <div>
+                    <Label>Paystack Public Key</Label>
+                    <Input value={formPaystackPublicKey}
+                      onChange={(e) => setFormPaystackPublicKey(e.target.value)} placeholder="pk_live_..." />
+                  </div>
+                  <div>
+                    <Label>Paystack Secret Key</Label>
+                    <Input type="password" value={formPaystackSecretKey}
+                      onChange={(e) => setFormPaystackSecretKey(e.target.value)} placeholder="sk_live_..." />
+                  </div>
                   <div className="grid grid-cols-3 gap-2">
-                    <div><Label>Currency</Label><Input value={formCurrency} onChange={(e) => setFormCurrency(e.target.value)} /></div>
-                    <div><Label>Min Amount</Label><Input type="number" value={formMinAmount} onChange={(e) => setFormMinAmount(e.target.value)} /></div>
-                    <div><Label>₦ per Vote</Label><Input type="number" value={formConversionRate} onChange={(e) => setFormConversionRate(e.target.value)} /></div>
+                    <div>
+                      <Label>Currency</Label>
+                      <Input value={formCurrency} onChange={(e) => setFormCurrency(e.target.value)} />
+                    </div>
+                    <div>
+                      <Label>Min Amount (₦)</Label>
+                      <Input type="number" value={formMinAmount}
+                        onChange={(e) => setFormMinAmount(e.target.value)} />
+                    </div>
+                    <div>
+                      <Label>₦ per Vote</Label>
+                      <Input type="number" value={formConversionRate}
+                        onChange={(e) => setFormConversionRate(e.target.value)} />
+                    </div>
+                  </div>
+
+                  {/* ── Funds Raised Toggle (in form) ─────────────────────── */}
+                  <div className="flex items-center justify-between p-3 bg-background rounded-lg border border-border">
+                    <div>
+                      <p className="text-sm font-medium">Show Funds Raised</p>
+                      <p className="text-xs text-muted-foreground">
+                        Display total amount raised in the public voting widget
+                      </p>
+                    </div>
+                    <Switch
+                      checked={formShowFundsRaised}
+                      onCheckedChange={setFormShowFundsRaised}
+                    />
                   </div>
                 </div>
               )}
@@ -280,9 +383,12 @@ const EventManager = () => {
           </DialogContent>
         </Dialog>
       </CardHeader>
+
       <CardContent>
         {events.length === 0 ? (
-          <p className="text-center text-muted-foreground py-8">No events yet. Create your first event!</p>
+          <p className="text-center text-muted-foreground py-8">
+            No events yet. Create your first event!
+          </p>
         ) : (
           <div className="overflow-x-auto">
             <Table>
@@ -291,6 +397,7 @@ const EventManager = () => {
                   <TableHead>Event</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Funds Display</TableHead>
                   <TableHead>Dates</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
@@ -305,16 +412,42 @@ const EventManager = () => {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${e.voting_type === "monetary" ? "bg-accent/10 text-accent" : "bg-primary/10 text-primary"}`}>
+                      <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        e.voting_type === "monetary"
+                          ? "bg-accent/10 text-accent"
+                          : "bg-primary/10 text-primary"
+                      }`}>
                         {e.voting_type === "monetary" ? "Paid" : "Free"}
                       </span>
                     </TableCell>
                     <TableCell>{statusBadge(e.status)}</TableCell>
+
+                    {/* ── Funds Raised Toggle Column ────────────────────────── */}
+                    <TableCell>
+                      {e.voting_type === "monetary" ? (
+                        <button
+                          onClick={() => handleToggleFundsRaised(e)}
+                          title={e.show_funds_raised ? "Click to hide funds raised from public" : "Click to show funds raised publicly"}
+                          className={`flex items-center gap-1.5 text-xs px-2 py-1 rounded-full font-medium transition-colors ${
+                            e.show_funds_raised
+                              ? "bg-green-100 text-green-700 hover:bg-red-100 hover:text-red-700"
+                              : "bg-muted text-muted-foreground hover:bg-green-100 hover:text-green-700"
+                          }`}
+                        >
+                          <DollarSign className="h-3 w-3" />
+                          {e.show_funds_raised ? "Visible" : "Hidden"}
+                        </button>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">N/A</span>
+                      )}
+                    </TableCell>
+
                     <TableCell className="text-xs text-muted-foreground">
                       {e.start_date ? new Date(e.start_date).toLocaleDateString() : "—"}
                       {" → "}
                       {e.end_date ? new Date(e.end_date).toLocaleDateString() : "—"}
                     </TableCell>
+
                     <TableCell>
                       <div className="flex gap-1 flex-wrap">
                         <Button size="sm" variant="outline" onClick={() => setManagingEvent(e)}>
@@ -338,8 +471,12 @@ const EventManager = () => {
                             Reopen
                           </Button>
                         )}
-                        <Button size="icon" variant="ghost" onClick={() => openEditDialog(e)}><Edit className="h-4 w-4" /></Button>
-                        <Button size="icon" variant="ghost" onClick={() => handleDelete(e.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+                        <Button size="icon" variant="ghost" onClick={() => openEditDialog(e)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button size="icon" variant="ghost" onClick={() => handleDelete(e.id)}>
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
                       </div>
                     </TableCell>
                   </TableRow>
