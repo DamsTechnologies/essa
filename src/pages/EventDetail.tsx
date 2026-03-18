@@ -14,7 +14,7 @@ import { toast } from "sonner";
 import StudentAuthModal from "@/components/events/StudentAuthModal";
 import EventVotingModal from "@/components/events/EventVotingModal";
 import EventContestantCard from "@/components/events/EventContestantCard";
-import VotingTransparencyWidget from "@/components/events/VotingTransparencyWidget"; // ← NEW
+import VotingTransparencyWidget from "@/components/events/VotingTransparencyWidget";
 
 interface EventData {
   id: string;
@@ -30,6 +30,7 @@ interface EventData {
   min_vote_amount: number;
   vote_conversion_rate: number;
   payment_currency: string;
+  show_funds_raised: boolean; // ← per-event admin toggle
 }
 
 interface EventContestant {
@@ -37,6 +38,7 @@ interface EventContestant {
   name: string;
   department: string | null;
   profile_image: string | null;
+  cover_image: string | null; // ← magazine cover
   description: string | null;
   total_votes: number;
   slug: string | null;
@@ -63,7 +65,7 @@ const EventDetail = () => {
     url: `https://theessa.vercel.app/events-hub/${eventId}`,
   });
 
-  // Check for payment success redirect
+  // Handle payment success redirect
   useEffect(() => {
     if (searchParams.get("payment") === "success") {
       toast.success("Payment successful! Votes have been added.");
@@ -75,7 +77,7 @@ const EventDetail = () => {
     if (!eventId) return;
     const { data } = await supabase
       .from("event_contestants")
-      .select("*")
+      .select("id, name, department, profile_image, cover_image, description, total_votes, slug")
       .eq("event_id", eventId)
       .eq("is_active", true)
       .order("total_votes", { ascending: false });
@@ -85,31 +87,42 @@ const EventDetail = () => {
   useEffect(() => {
     if (!eventId) return;
     const fetchEvent = async () => {
-      const { data: eventData } = await supabase.from("events").select("*").eq("id", eventId).single();
+      const { data: eventData } = await supabase
+        .from("events")
+        .select("*")
+        .eq("id", eventId)
+        .single();
       if (eventData) setEvent(eventData as EventData);
       setLoading(false);
     };
     fetchEvent();
     fetchContestants();
 
-    // Realtime
+    // Realtime updates
     const channel = supabase
       .channel(`event-contestants-${eventId}`)
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "event_contestants", filter: `event_id=eq.${eventId}` },
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "event_contestants", filter: `event_id=eq.${eventId}` },
         (payload) => {
           setContestants((prev) =>
-            prev.map((c) => c.id === payload.new.id ? { ...c, total_votes: (payload.new as any).total_votes } : c)
+            prev
+              .map((c) => c.id === payload.new.id ? { ...c, total_votes: (payload.new as any).total_votes } : c)
               .sort((a, b) => b.total_votes - a.total_votes)
           );
-        })
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "event_contestants", filter: `event_id=eq.${eventId}` },
-        () => { fetchContestants(); })
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "event_contestants", filter: `event_id=eq.${eventId}` },
+        () => { fetchContestants(); }
+      )
       .subscribe();
 
     return () => { supabase.removeChannel(channel); };
   }, [eventId, fetchContestants]);
 
-  // Check which contestants student already voted for
+  // Check which contestants the student already voted for
   useEffect(() => {
     if (!student || !eventId || !event || event.voting_type !== "free") return;
     const checkVotes = async () => {
@@ -174,6 +187,7 @@ const EventDetail = () => {
     }
   };
 
+  // After login, cast the pending vote automatically
   useEffect(() => {
     if (student && pendingVoteContestant) {
       castFreeVote(pendingVoteContestant);
@@ -238,13 +252,15 @@ const EventDetail = () => {
               <Badge variant="outline" className="text-white border-white/30">
                 {event.voting_type === "monetary" ? "Paid Voting" : "Free Voting"}
               </Badge>
-              {event.category && <Badge variant="outline" className="text-white border-white/30">{event.category}</Badge>}
+              {event.category && (
+                <Badge variant="outline" className="text-white border-white/30">{event.category}</Badge>
+              )}
             </div>
           </div>
         </div>
       </section>
 
-      {/* Student auth bar for free events */}
+      {/* Student auth bar — free events only */}
       {event.voting_type === "free" && (
         <div className="border-b border-border bg-muted/50">
           <div className="container max-w-screen-xl px-4 py-3 flex items-center justify-between">
@@ -270,8 +286,10 @@ const EventDetail = () => {
       {/* Description & Stats */}
       <section className="py-6 border-b border-border">
         <div className="container max-w-screen-xl px-4">
-          {event.description && <p className="text-muted-foreground max-w-3xl mb-4">{event.description}</p>}
-          <div className="flex gap-6 text-sm">
+          {event.description && (
+            <p className="text-muted-foreground max-w-3xl mb-4">{event.description}</p>
+          )}
+          <div className="flex gap-6 text-sm flex-wrap">
             <div className="flex items-center gap-1 text-muted-foreground">
               <Vote className="h-4 w-4" /> {totalVotes.toLocaleString()} total votes
             </div>
@@ -287,20 +305,21 @@ const EventDetail = () => {
         </div>
       </section>
 
-      {/* ── TRANSPARENCY WIDGET ─────────────────────────────────────────────── */}
+      {/* ── Transparency Widget — show_funds_raised controls funds display ── */}
       <section className="py-6 border-b border-border bg-muted/20">
         <div className="container max-w-screen-xl px-4">
           <VotingTransparencyWidget
             eventId={eventId!}
             votingType={event.voting_type}
             isLive={isLive}
+            showFundsRaised={event.show_funds_raised}
           />
         </div>
       </section>
 
       {/* Leaderboard */}
       {topContestants.length > 0 && (
-        <section id="leaderboard" className="py-8">
+        <section className="py-8">
           <div className="container max-w-screen-xl px-4">
             <h2 className="text-2xl font-heading font-bold text-primary mb-4 flex items-center gap-2">
               <Trophy className="h-6 w-6 text-accent" /> Leaderboard
@@ -309,11 +328,20 @@ const EventDetail = () => {
               {topContestants.map((c, i) => (
                 <Card key={c.id} className={`overflow-hidden ${i === 0 ? "ring-2 ring-accent" : ""}`}>
                   <CardContent className="flex items-center gap-4 p-4">
-                    <div className={`text-2xl font-bold ${i === 0 ? "text-accent" : "text-muted-foreground"}`}>#{i + 1}</div>
-                    {c.profile_image ? (
-                      <img src={c.profile_image} alt={c.name} className="w-12 h-12 rounded-full object-cover" loading="lazy" />
+                    <div className={`text-2xl font-bold ${i === 0 ? "text-accent" : "text-muted-foreground"}`}>
+                      #{i + 1}
+                    </div>
+                    {(c.cover_image || c.profile_image) ? (
+                      <img
+                        src={c.cover_image || c.profile_image!}
+                        alt={c.name}
+                        className="w-12 h-12 rounded-full object-cover"
+                        loading="lazy"
+                      />
                     ) : (
-                      <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center text-sm font-bold">{c.name.charAt(0)}</div>
+                      <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center text-sm font-bold">
+                        {c.name.charAt(0)}
+                      </div>
                     )}
                     <div className="min-w-0 flex-1">
                       <p className="font-bold truncate">{c.name}</p>

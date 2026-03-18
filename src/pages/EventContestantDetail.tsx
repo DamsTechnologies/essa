@@ -4,14 +4,17 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { supabase } from "@/integrations/supabase/client";
 import { useSEO } from "@/hooks/useSEO";
+import { useStudentAuth } from "@/hooks/useStudentAuth";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Heart, ArrowLeft, Share2, Trophy, ChevronLeft, ChevronRight,
-  Play, ExternalLink, Vote,
+  Play, ExternalLink, CheckCircle, LogOut,
 } from "lucide-react";
 import { toast } from "sonner";
+import StudentAuthModal from "@/components/events/StudentAuthModal";
+import EventVotingModal from "@/components/events/EventVotingModal";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -20,8 +23,10 @@ interface ContestantData {
   name: string;
   department: string | null;
   profile_image: string | null;
+  cover_image: string | null;
   video_url: string | null;
   description: string | null;
+  biography: string | null;
   total_votes: number;
   slug: string | null;
   event_id: string;
@@ -40,6 +45,11 @@ interface EventData {
   title: string;
   voting_type: "monetary" | "free";
   status: "draft" | "live" | "ended";
+  vote_rule: "per_contestant" | "per_event";
+  min_vote_amount: number;
+  vote_conversion_rate: number;
+  payment_currency: string;
+  voting_paused: boolean;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -50,11 +60,6 @@ const getYouTubeId = (url: string) => {
   );
   return match?.[1] || null;
 };
-
-const isVideoUrl = (url: string) =>
-  url.includes("youtube") || url.includes("youtu.be") ||
-  url.includes("vimeo") || url.includes("tiktok") ||
-  url.includes("drive.google") || url.match(/\.(mp4|webm|mov)$/i);
 
 // ─── Media Slideshow ──────────────────────────────────────────────────────────
 
@@ -74,7 +79,6 @@ const MediaSlideshow = ({ media, name }: { media: MediaItem[]; name: string }) =
 
   return (
     <div className="space-y-3">
-      {/* Main media display */}
       <div className="relative rounded-2xl overflow-hidden bg-muted shadow-lg">
         {current.media_type === "image" ? (
           <img
@@ -108,7 +112,6 @@ const MediaSlideshow = ({ media, name }: { media: MediaItem[]; name: string }) =
           </div>
         )}
 
-        {/* Nav arrows — only show if more than 1 */}
         {allMedia.length > 1 && (
           <>
             <button
@@ -123,7 +126,6 @@ const MediaSlideshow = ({ media, name }: { media: MediaItem[]; name: string }) =
             >
               <ChevronRight className="h-5 w-5" />
             </button>
-            {/* Counter */}
             <div className="absolute bottom-3 right-3 bg-black/50 text-white text-xs px-2 py-1 rounded-full backdrop-blur-sm">
               {activeIndex + 1} / {allMedia.length}
             </div>
@@ -131,7 +133,6 @@ const MediaSlideshow = ({ media, name }: { media: MediaItem[]; name: string }) =
         )}
       </div>
 
-      {/* Thumbnail strip — only show if more than 1 */}
       {allMedia.length > 1 && (
         <div className="flex gap-2 overflow-x-auto pb-1">
           {allMedia.map((item, i) => (
@@ -145,11 +146,7 @@ const MediaSlideshow = ({ media, name }: { media: MediaItem[]; name: string }) =
               }`}
             >
               {item.media_type === "image" ? (
-                <img
-                  src={item.url}
-                  alt={`Thumbnail ${i + 1}`}
-                  className="w-16 h-16 object-cover"
-                />
+                <img src={item.url} alt={`Thumbnail ${i + 1}`} className="w-16 h-16 object-cover" />
               ) : (
                 <div className="w-16 h-16 bg-muted flex items-center justify-center">
                   <Play className="h-5 w-5 text-muted-foreground" />
@@ -172,26 +169,37 @@ const EventContestantDetail = () => {
   const [media, setMedia] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // ── Voting state ─────────────────────────────────────────────────────────
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showMonetaryModal, setShowMonetaryModal] = useState(false);
+  const [pendingVote, setPendingVote] = useState(false);
+  const [votedForThisContestant, setVotedForThisContestant] = useState(false);
+  const [votedInEvent, setVotedInEvent] = useState(false);
+  const [castingVote, setCastingVote] = useState(false);
+
+  const { student, login, signup, logout } = useStudentAuth();
+
   useSEO({
     title: contestant ? `${contestant.name} — ESSA Events` : "Contestant — ESSA",
     description: contestant?.description || "ESSA Event Contestant",
     url: `https://theessa.vercel.app/events-hub/${eventId}/contestant/${contestantSlug}`,
   });
 
+  // ── Fetch all data ────────────────────────────────────────────────────────
   useEffect(() => {
     if (!eventId || !contestantSlug) return;
 
     const fetchAll = async () => {
-      // ── Fetch event ──────────────────────────────────────────────────────
+      // Fetch event with full voting config
       const { data: eventData } = await supabase
         .from("events")
-        .select("id, title, voting_type, status")
+        .select("id, title, voting_type, status, vote_rule, min_vote_amount, vote_conversion_rate, payment_currency, voting_paused")
         .eq("id", eventId)
         .single();
 
       if (eventData) setEvent(eventData as EventData);
 
-      // ── Fetch contestant: try by slug first, then fall back to id ────────
+      // Fetch contestant by slug, fallback to id
       let contestantData: ContestantData | null = null;
 
       const { data: bySlug } = await supabase
@@ -204,21 +212,19 @@ const EventContestantDetail = () => {
       if (bySlug) {
         contestantData = bySlug as ContestantData;
       } else {
-        // fallback: maybe the URL param is actually the UUID
         const { data: byId } = await supabase
           .from("event_contestants")
           .select("*")
           .eq("event_id", eventId)
           .eq("id", contestantSlug)
           .maybeSingle();
-
         if (byId) contestantData = byId as ContestantData;
       }
 
       if (contestantData) {
         setContestant(contestantData);
 
-        // ── Fetch media ────────────────────────────────────────────────────
+        // Fetch media from contestant_media table
         const { data: mediaData } = await supabase
           .from("contestant_media")
           .select("*")
@@ -228,9 +234,30 @@ const EventContestantDetail = () => {
         if (mediaData && mediaData.length > 0) {
           setMedia(mediaData as MediaItem[]);
         } else {
-          // Fallback: build media from profile_image + video_url fields
+          // Fallback: build from cover_image + profile_image + video_url fields
           const fallback: MediaItem[] = [];
-          if (contestantData.profile_image) {
+          // Cover image is the primary display (magazine cover goes first)
+          if (contestantData.cover_image) {
+            fallback.push({
+              id: "fallback-cover",
+              media_type: "image",
+              url: contestantData.cover_image,
+              is_primary: true,
+              sort_order: 0,
+            });
+          }
+          // Profile image as secondary if different from cover
+          if (contestantData.profile_image && contestantData.profile_image !== contestantData.cover_image) {
+            fallback.push({
+              id: "fallback-profile",
+              media_type: "image",
+              url: contestantData.profile_image,
+              is_primary: !contestantData.cover_image,
+              sort_order: 1,
+            });
+          }
+          // If no cover_image, use profile_image as primary
+          if (!contestantData.cover_image && contestantData.profile_image) {
             fallback.push({
               id: "fallback-img",
               media_type: "image",
@@ -245,7 +272,7 @@ const EventContestantDetail = () => {
               media_type: "video",
               url: contestantData.video_url,
               is_primary: false,
-              sort_order: 1,
+              sort_order: fallback.length,
             });
           }
           setMedia(fallback);
@@ -257,7 +284,7 @@ const EventContestantDetail = () => {
 
     fetchAll();
 
-    // ── Realtime vote count updates ──────────────────────────────────────
+    // Realtime vote count
     const channel = supabase
       .channel(`event-contestant-${contestantSlug}`)
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "event_contestants" },
@@ -276,6 +303,94 @@ const EventContestantDetail = () => {
     return () => { supabase.removeChannel(channel); };
   }, [eventId, contestantSlug]);
 
+  // ── Check if student already voted ───────────────────────────────────────
+  useEffect(() => {
+    if (!student || !eventId || !contestant || event?.voting_type !== "free") return;
+
+    const checkVotes = async () => {
+      // Check if voted for this specific contestant
+      const { data: thisVote } = await supabase
+        .from("event_votes")
+        .select("id")
+        .eq("student_id", student.id)
+        .eq("contestant_id", contestant.id)
+        .eq("event_id", eventId)
+        .limit(1);
+      if (thisVote && thisVote.length > 0) setVotedForThisContestant(true);
+
+      // Check if voted anywhere in this event
+      const { data: anyVote } = await supabase
+        .from("event_votes")
+        .select("id")
+        .eq("student_id", student.id)
+        .eq("event_id", eventId)
+        .limit(1);
+      if (anyVote && anyVote.length > 0) setVotedInEvent(true);
+    };
+    checkVotes();
+  }, [student, eventId, contestant, event]);
+
+  // ── Voting handlers ───────────────────────────────────────────────────────
+  const handleVote = () => {
+    if (!event || !contestant) return;
+    if (event.status !== "live") { toast.error("Voting is not open for this event"); return; }
+    if (event.voting_paused) { toast.error("Voting has been temporarily paused"); return; }
+
+    if (event.voting_type === "monetary") {
+      setShowMonetaryModal(true);
+      return;
+    }
+
+    // Free voting
+    if (!student) {
+      setPendingVote(true);
+      setShowAuthModal(true);
+      return;
+    }
+
+    castFreeVote();
+  };
+
+  const castFreeVote = async () => {
+    if (!student || !eventId || !contestant) return;
+
+    if (event?.vote_rule === "per_event" && votedInEvent) {
+      toast.error("You have already voted in this event");
+      return;
+    }
+    if (event?.vote_rule === "per_contestant" && votedForThisContestant) {
+      toast.error("You have already voted for this contestant");
+      return;
+    }
+
+    setCastingVote(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("event-free-vote", {
+        body: { student_id: student.id, contestant_id: contestant.id, event_id: eventId },
+      });
+
+      if (error || data?.error) {
+        toast.error(data?.error || "Failed to cast vote");
+        return;
+      }
+
+      toast.success(`Vote cast for ${contestant.name}! 🎉`);
+      setVotedForThisContestant(true);
+      setVotedInEvent(true);
+    } catch {
+      toast.error("Something went wrong");
+    }
+    setCastingVote(false);
+  };
+
+  // After login, cast the pending vote automatically
+  useEffect(() => {
+    if (student && pendingVote) {
+      castFreeVote();
+      setPendingVote(false);
+    }
+  }, [student, pendingVote]);
+
   const handleShare = () => {
     const url = window.location.href;
     if (navigator.share) {
@@ -284,6 +399,19 @@ const EventContestantDetail = () => {
       navigator.clipboard.writeText(url);
       toast.success("Link copied to clipboard!");
     }
+  };
+
+  // ── Derived state ─────────────────────────────────────────────────────────
+  const isLive = event?.status === "live";
+  const alreadyVoted =
+    votedForThisContestant ||
+    (event?.vote_rule === "per_event" && votedInEvent);
+
+  const voteButtonLabel = () => {
+    if (!isLive) return "Voting Closed";
+    if (alreadyVoted) return "Already Voted ✓";
+    if (castingVote) return "Casting Vote...";
+    return `Vote for ${contestant?.name.split(" ")[0]}`;
   };
 
   // ── Loading ───────────────────────────────────────────────────────────────
@@ -308,7 +436,6 @@ const EventContestantDetail = () => {
     );
   }
 
-  // ── Not found ─────────────────────────────────────────────────────────────
   if (!contestant || !event) {
     return (
       <div className="min-h-screen bg-background">
@@ -322,11 +449,32 @@ const EventContestantDetail = () => {
     );
   }
 
-  const isLive = event.status === "live";
-
   return (
     <div className="min-h-screen bg-background">
       <Header />
+
+      {/* Student auth bar — free events only */}
+      {event.voting_type === "free" && isLive && (
+        <div className="border-b border-border bg-muted/50">
+          <div className="container max-w-screen-lg px-4 py-2 flex items-center justify-between">
+            {student ? (
+              <div className="flex items-center gap-3">
+                <p className="text-sm text-foreground">
+                  Voting as <span className="font-medium">{student.first_name} {student.last_name}</span>
+                </p>
+                <Button variant="ghost" size="sm" onClick={logout}>
+                  <LogOut className="h-3 w-3 mr-1" /> Logout
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-3">
+                <p className="text-sm text-muted-foreground">Sign in to vote</p>
+                <Button size="sm" onClick={() => setShowAuthModal(true)}>Sign In / Register</Button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="container max-w-screen-lg py-8 px-4">
 
@@ -340,25 +488,32 @@ const EventContestantDetail = () => {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8 md:gap-12">
 
-          {/* ── Left: Media ─────────────────────────────────────────────────── */}
+          {/* ── Left: Media Slideshow ────────────────────────────────────────── */}
           <div>
             <MediaSlideshow media={media} name={contestant.name} />
           </div>
 
-          {/* ── Right: Info ─────────────────────────────────────────────────── */}
+          {/* ── Right: Info + Voting ─────────────────────────────────────────── */}
           <div className="space-y-6">
 
-            {/* Name + department */}
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <Badge variant={isLive ? "default" : "secondary"}>
-                  {isLive ? "Voting Open" : event.status === "ended" ? "Voting Closed" : "Draft"}
+            {/* Status badges */}
+            <div className="flex items-center gap-2 flex-wrap">
+              <Badge variant={isLive ? "default" : "secondary"}>
+                {isLive ? "Voting Open" : event.status === "ended" ? "Voting Closed" : "Draft"}
+              </Badge>
+              {event.voting_type === "monetary" && (
+                <Badge variant="outline">💰 Paid Voting</Badge>
+              )}
+              {alreadyVoted && isLive && (
+                <Badge variant="outline" className="text-green-600 border-green-400">
+                  <CheckCircle className="h-3 w-3 mr-1" /> Voted
                 </Badge>
-                {event.voting_type === "monetary" && (
-                  <Badge variant="outline">💰 Paid Voting</Badge>
-                )}
-              </div>
-              <h1 className="font-heading font-bold text-3xl md:text-4xl text-foreground mt-2">
+              )}
+            </div>
+
+            {/* Name */}
+            <div>
+              <h1 className="font-heading font-bold text-3xl md:text-4xl text-foreground">
                 {contestant.name}
               </h1>
               {contestant.department && (
@@ -379,7 +534,7 @@ const EventContestantDetail = () => {
               </div>
             </div>
 
-            {/* Description */}
+            {/* Description / Biography */}
             {contestant.description && (
               <div>
                 <h3 className="font-heading font-bold text-lg text-foreground mb-2">About</h3>
@@ -388,31 +543,40 @@ const EventContestantDetail = () => {
                 </p>
               </div>
             )}
+            {contestant.biography && contestant.biography !== contestant.description && (
+              <div>
+                <h3 className="font-heading font-bold text-lg text-foreground mb-2">Biography</h3>
+                <p className="text-muted-foreground leading-relaxed whitespace-pre-line">
+                  {contestant.biography}
+                </p>
+              </div>
+            )}
 
-            {/* Action buttons */}
+            {/* ── VOTE BUTTON (works directly from this page) ──────────────── */}
             <div className="flex gap-3 pt-2">
               {isLive ? (
                 <Button
-                  asChild
-                  className="flex-1 bg-accent text-accent-foreground hover:bg-accent/90 h-12 text-base"
+                  className={`flex-1 h-12 text-base ${
+                    alreadyVoted
+                      ? "bg-green-600 hover:bg-green-600 text-white"
+                      : "bg-accent text-accent-foreground hover:bg-accent/90"
+                  }`}
+                  onClick={handleVote}
+                  disabled={alreadyVoted || castingVote}
                 >
-                  <Link to={`/events-hub/${eventId}`}>
-                    <Vote className="h-5 w-5 mr-2" />
-                    Vote for {contestant.name.split(" ")[0]}
-                  </Link>
+                  {alreadyVoted
+                    ? <><CheckCircle className="h-5 w-5 mr-2" /> Already Voted</>
+                    : <><Heart className="h-5 w-5 mr-2" /> {voteButtonLabel()}</>
+                  }
                 </Button>
               ) : (
-                <Button
-                  asChild
-                  variant="secondary"
-                  className="flex-1 h-12 text-base"
-                >
+                <Button variant="secondary" className="flex-1 h-12 text-base" asChild>
                   <Link to={`/events-hub/${eventId}`}>
-                    <Trophy className="h-5 w-5 mr-2" />
-                    View Results
+                    <Trophy className="h-5 w-5 mr-2" /> View Results
                   </Link>
                 </Button>
               )}
+
               <Button
                 variant="outline"
                 size="icon"
@@ -424,19 +588,44 @@ const EventContestantDetail = () => {
               </Button>
             </div>
 
-            {/* Media count hint */}
+            {/* Media hint */}
             {media.length > 1 && (
               <p className="text-xs text-muted-foreground text-center">
                 📸 {media.filter(m => m.media_type === "image").length} photos
                 {media.filter(m => m.media_type === "video").length > 0 &&
-                  ` · 🎬 ${media.filter(m => m.media_type === "video").length} video${media.filter(m => m.media_type === "video").length > 1 ? "s" : ""}`
+                  ` · 🎬 ${media.filter(m => m.media_type === "video").length} video${
+                    media.filter(m => m.media_type === "video").length > 1 ? "s" : ""
+                  }`
                 }
-                {" "}— swipe or use arrows to browse
+                {" "}— use arrows to browse
               </p>
             )}
           </div>
         </div>
       </div>
+
+      {/* ── Auth Modal ────────────────────────────────────────────────────────── */}
+      <StudentAuthModal
+        isOpen={showAuthModal}
+        onClose={() => { setShowAuthModal(false); setPendingVote(false); }}
+        onLogin={login}
+        onSignup={signup}
+      />
+
+      {/* ── Monetary Voting Modal ─────────────────────────────────────────────── */}
+      {event.voting_type === "monetary" && (
+        <EventVotingModal
+          contestant={contestant}
+          event={{
+            id: event.id,
+            min_vote_amount: event.min_vote_amount,
+            vote_conversion_rate: event.vote_conversion_rate,
+            payment_currency: event.payment_currency,
+          }}
+          isOpen={showMonetaryModal}
+          onClose={() => setShowMonetaryModal(false)}
+        />
+      )}
 
       <Footer />
     </div>
