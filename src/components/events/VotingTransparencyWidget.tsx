@@ -21,6 +21,7 @@ interface Props {
   eventId: string;
   votingType: "monetary" | "free";
   isLive: boolean;
+  showFundsRaised?: boolean; // ← admin-controlled toggle (default true)
 }
 
 const formatTimeAgo = (dateStr: string) => {
@@ -33,7 +34,12 @@ const formatTimeAgo = (dateStr: string) => {
   return `${hours}h ago`;
 };
 
-const VotingTransparencyWidget = ({ eventId, votingType, isLive }: Props) => {
+const VotingTransparencyWidget = ({
+  eventId,
+  votingType,
+  isLive,
+  showFundsRaised = true,
+}: Props) => {
   const [stats, setStats] = useState<TransparencyStats>({
     totalVotes: 0,
     uniqueVoters: 0,
@@ -43,21 +49,17 @@ const VotingTransparencyWidget = ({ eventId, votingType, isLive }: Props) => {
   const [feed, setFeed] = useState<ActivityEntry[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // ── Initial data fetch ────────────────────────────────────────────────────
   const fetchStats = async () => {
     if (votingType === "free") {
       const [votesRes, uniqueRes, lastRes] = await Promise.all([
-        // total votes = sum of contestant votes for this event
         supabase
           .from("event_votes")
           .select("id", { count: "exact", head: true })
           .eq("event_id", eventId),
-        // unique voters
         supabase
           .from("event_votes")
           .select("student_id")
           .eq("event_id", eventId),
-        // last vote timestamp
         supabase
           .from("event_votes")
           .select("created_at")
@@ -78,7 +80,6 @@ const VotingTransparencyWidget = ({ eventId, votingType, isLive }: Props) => {
         totalFunds: 0,
       });
     } else {
-      // Monetary: get from event_payments
       const [paymentsRes, lastRes] = await Promise.all([
         supabase
           .from("event_payments")
@@ -109,7 +110,6 @@ const VotingTransparencyWidget = ({ eventId, votingType, isLive }: Props) => {
   };
 
   const fetchFeed = async () => {
-    // Join event_votes with event_contestants to get contestant name
     const { data } = await supabase
       .from("event_votes")
       .select("id, created_at, contestant_id, event_contestants(name)")
@@ -135,7 +135,6 @@ const VotingTransparencyWidget = ({ eventId, votingType, isLive }: Props) => {
 
     if (!isLive) return;
 
-    // ── Realtime subscription for live updates ────────────────────────────────
     const channel = supabase
       .channel(`transparency-${eventId}`)
       .on(
@@ -147,15 +146,12 @@ const VotingTransparencyWidget = ({ eventId, votingType, isLive }: Props) => {
           filter: `event_id=eq.${eventId}`,
         },
         async (payload) => {
-          // Update stats
           setStats((prev) => ({
             ...prev,
             totalVotes: prev.totalVotes + 1,
             lastVoteAt: (payload.new as any).created_at,
-            // uniqueVoters: rough increment (exact count needs a query)
           }));
 
-          // Fetch contestant name for feed entry
           const { data: c } = await supabase
             .from("event_contestants")
             .select("name")
@@ -176,9 +172,12 @@ const VotingTransparencyWidget = ({ eventId, votingType, isLive }: Props) => {
     return () => { supabase.removeChannel(channel); };
   }, [eventId, isLive, votingType]);
 
+  // Decide how many stat columns to show
+  const showFunds = votingType === "monetary" && showFundsRaised;
+
   return (
     <div className="space-y-4">
-      {/* ── Stats bar ──────────────────────────────────────────────────────── */}
+      {/* ── Stats bar ─────────────────────────────────────────────────────── */}
       <Card>
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
@@ -193,33 +192,44 @@ const VotingTransparencyWidget = ({ eventId, votingType, isLive }: Props) => {
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className={`grid gap-4 ${showFunds ? "grid-cols-2 md:grid-cols-4" : "grid-cols-2 md:grid-cols-3"}`}>
+
+            {/* Total Votes */}
             <div className="text-center">
               <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
                 <Vote className="h-3.5 w-3.5" />
                 <span className="text-xs">Total Votes</span>
               </div>
-              <p className="text-2xl font-bold text-foreground">{stats.totalVotes.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-foreground">
+                {stats.totalVotes.toLocaleString()}
+              </p>
             </div>
 
+            {/* Participants */}
             <div className="text-center">
               <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
                 <Users className="h-3.5 w-3.5" />
                 <span className="text-xs">Participants</span>
               </div>
-              <p className="text-2xl font-bold text-foreground">{stats.uniqueVoters.toLocaleString()}</p>
+              <p className="text-2xl font-bold text-foreground">
+                {stats.uniqueVoters.toLocaleString()}
+              </p>
             </div>
 
-            {votingType === "monetary" && (
+            {/* Funds Raised — only shown when admin toggles it ON for monetary events */}
+            {showFunds && (
               <div className="text-center">
                 <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
                   <DollarSign className="h-3.5 w-3.5" />
                   <span className="text-xs">Funds Raised</span>
                 </div>
-                <p className="text-2xl font-bold text-foreground">₦{stats.totalFunds.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-foreground">
+                  ₦{stats.totalFunds.toLocaleString()}
+                </p>
               </div>
             )}
 
+            {/* Last Vote */}
             <div className="text-center">
               <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
                 <Clock className="h-3.5 w-3.5" />
@@ -233,7 +243,7 @@ const VotingTransparencyWidget = ({ eventId, votingType, isLive }: Props) => {
         </CardContent>
       </Card>
 
-      {/* ── Live activity feed (free voting only — monetary lacks vote rows) ── */}
+      {/* ── Live activity feed (free voting only) ─────────────────────────── */}
       {votingType === "free" && (
         <Card>
           <CardHeader className="pb-3">
@@ -259,7 +269,9 @@ const VotingTransparencyWidget = ({ eventId, votingType, isLive }: Props) => {
                   <li
                     key={entry.id}
                     className={`flex items-center justify-between text-sm py-1.5 px-3 rounded-lg transition-colors ${
-                      i === 0 ? "bg-accent/10 border border-accent/20" : "bg-muted/40"
+                      i === 0
+                        ? "bg-accent/10 border border-accent/20"
+                        : "bg-muted/40"
                     }`}
                   >
                     <span className="text-foreground">
