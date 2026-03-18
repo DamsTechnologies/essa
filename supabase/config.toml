@@ -2,3 +2,6 @@ project_id = "tgalaebjukxyrzwudcmb"
 
 [functions.paystack-webhook]
 verify_jwt = false
+
+[functions.event-payment-webhook]
+verify_jwt = false
