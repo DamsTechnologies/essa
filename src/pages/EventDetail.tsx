@@ -312,7 +312,7 @@ const EventDetail = () => {
             eventId={eventId!}
             votingType={event.voting_type}
             isLive={isLive}
-            showFundsRaised={event.show_funds_raised}
+            showFundsRaised={false}
           />
         </div>
       </section>
