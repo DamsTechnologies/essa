@@ -15,7 +15,7 @@ const Footer = () => {
               className="h-10 w-10 object-contain"
             />
             <div className="flex flex-col">
-              <span className="font-heading font-bold text-lg leading-tight">ESSA</span>
+              <span className="font-heading font-bold text-lg leading-tight">ESTAM</span>
               <span className="text-xs text-primary-foreground/70 leading-tight">Students' Association</span>
             </div>
           </div>
@@ -89,7 +89,7 @@ const Footer = () => {
                 <div>
                   <p className="text-primary-foreground/80">ESSA Office</p>
                   <p className="text-primary-foreground/60 text-sm">
-                    Student Center, 2nd Floor<br />
+                    Administrative Building,<br />
                     ESTAM University Campus
                   </p>
                 </div>
@@ -106,10 +106,10 @@ const Footer = () => {
               <div className="flex items-center gap-3">
                 <Phone className="h-5 w-5 text-accent" />
                 <a 
-                  href="tel:+22961076577" 
+                  href="tel:+22950250897" 
                   className="text-primary-foreground/80 hover:text-accent transition-colors"
                 >
-                  +229 61 07 65 77
+                  +229 50 25 08 97
                 </a>
               </div>
             </div>
@@ -119,7 +119,7 @@ const Footer = () => {
         {/* Bottom Bar */}
         <div className="border-t border-primary-foreground/20 mt-12 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="text-primary-foreground/60 text-sm space-y-1">
-            <p>© 2025 ESSA - ESTAM Students' Association. All rights reserved.</p>
+            <p>© 2026 ESSA - ESTAM Students' Association. All rights reserved.</p>
             <p>Built with ❤️ by <a href="#" className="text-accent hover:text-accent/80 transition-colors">Dams Technologies</a></p>
           </div>
           <div className="flex items-center gap-6 text-sm">
