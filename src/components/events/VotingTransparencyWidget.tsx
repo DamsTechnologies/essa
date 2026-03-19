@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -7,6 +7,7 @@ import { Vote, Users, Clock, Activity, DollarSign } from "lucide-react";
 interface ActivityEntry {
   id: string;
   contestant_name: string;
+  votes_added: number;
   created_at: string;
 }
 
@@ -21,7 +22,7 @@ interface Props {
   eventId: string;
   votingType: "monetary" | "free";
   isLive: boolean;
-  showFundsRaised?: boolean; // ← admin-controlled toggle (default true)
+  showFundsRaised?: boolean;
 }
 
 const formatTimeAgo = (dateStr: string) => {
@@ -31,7 +32,8 @@ const formatTimeAgo = (dateStr: string) => {
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes}m ago`;
   const hours = Math.floor(minutes / 60);
-  return `${hours}h ago`;
+  if (hours < 24) return `${hours}h ago`;
+  return new Date(dateStr).toLocaleDateString();
 };
 
 const VotingTransparencyWidget = ({
@@ -48,96 +50,135 @@ const VotingTransparencyWidget = ({
   });
   const [feed, setFeed] = useState<ActivityEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const statsRef = useRef(stats);
+  statsRef.current = stats;
 
+  // ── Fetch stats ────────────────────────────────────────────────────────────
+  // totalVotes always comes from event_contestants.total_votes
+  // This is the single accurate source for BOTH free and monetary events
   const fetchStats = async () => {
-    if (votingType === "free") {
-      const [votesRes, uniqueRes, lastRes] = await Promise.all([
-        supabase
-          .from("event_votes")
-          .select("id", { count: "exact", head: true })
-          .eq("event_id", eventId),
-        supabase
+    try {
+      const { data: contestantsData } = await supabase
+        .from("event_contestants")
+        .select("total_votes")
+        .eq("event_id", eventId)
+        .eq("is_active", true);
+
+      const totalVotes = (contestantsData || []).reduce(
+        (sum: number, c: any) => sum + (c.total_votes || 0), 0
+      );
+
+      if (votingType === "free") {
+        const { data: votersData } = await supabase
           .from("event_votes")
           .select("student_id")
-          .eq("event_id", eventId),
-        supabase
+          .eq("event_id", eventId);
+
+        const uniqueVoters = new Set(
+          (votersData || []).map((v: any) => v.student_id)
+        ).size;
+
+        // maybeSingle() never throws on empty — unlike single()
+        const { data: lastVoteData } = await supabase
           .from("event_votes")
           .select("created_at")
           .eq("event_id", eventId)
           .order("created_at", { ascending: false })
           .limit(1)
-          .single(),
-      ]);
+          .maybeSingle();
 
-      const uniqueVoters = new Set(
-        (uniqueRes.data || []).map((v: any) => v.student_id)
-      ).size;
+        setStats({
+          totalVotes,
+          uniqueVoters,
+          lastVoteAt: lastVoteData?.created_at || null,
+          totalFunds: 0,
+        });
 
-      setStats({
-        totalVotes: votesRes.count || 0,
-        uniqueVoters,
-        lastVoteAt: lastRes.data?.created_at || null,
-        totalFunds: 0,
-      });
-    } else {
-      const [paymentsRes, lastRes] = await Promise.all([
-        supabase
+      } else {
+        const { data: paymentsData } = await supabase
           .from("event_payments")
-          .select("votes_purchased, amount")
+          .select("amount, created_at")
           .eq("event_id", eventId)
-          .eq("payment_status", "verified"),
-        supabase
-          .from("event_payments")
-          .select("created_at")
-          .eq("event_id", eventId)
-          .eq("payment_status", "verified")
-          .order("created_at", { ascending: false })
-          .limit(1)
-          .single(),
-      ]);
+          .eq("payment_status", "verified");
 
-      const payments = paymentsRes.data || [];
-      const totalVotes = payments.reduce((s: number, p: any) => s + p.votes_purchased, 0);
-      const totalFunds = payments.reduce((s: number, p: any) => s + p.amount, 0);
+        const payments = paymentsData || [];
+        const totalFunds = payments.reduce(
+          (sum: number, p: any) => sum + (p.amount || 0), 0
+        );
 
-      setStats({
-        totalVotes,
-        uniqueVoters: payments.length,
-        lastVoteAt: lastRes.data?.created_at || null,
-        totalFunds,
-      });
+        // Get last payment timestamp safely
+        const sortedPayments = [...payments].sort(
+          (a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
+        const lastPaymentAt = sortedPayments[0]?.created_at || null;
+
+        setStats({
+          totalVotes,
+          uniqueVoters: payments.length,
+          lastVoteAt: lastPaymentAt,
+          totalFunds,
+        });
+      }
+    } catch (err) {
+      console.error("fetchStats error:", err);
     }
   };
 
+  // ── Fetch activity feed ────────────────────────────────────────────────────
   const fetchFeed = async () => {
-    const { data } = await supabase
-      .from("event_votes")
-      .select("id, created_at, contestant_id, event_contestants(name)")
-      .eq("event_id", eventId)
-      .order("created_at", { ascending: false })
-      .limit(15);
+    try {
+      if (votingType === "free") {
+        const { data } = await supabase
+          .from("event_votes")
+          .select("id, created_at, contestant_id, event_contestants(name)")
+          .eq("event_id", eventId)
+          .order("created_at", { ascending: false })
+          .limit(15);
 
-    if (data) {
-      setFeed(
-        data.map((v: any) => ({
-          id: v.id,
-          contestant_name: v.event_contestants?.name || "a contestant",
-          created_at: v.created_at,
-        }))
-      );
+        if (data) {
+          setFeed(data.map((v: any) => ({
+            id: v.id,
+            contestant_name: v.event_contestants?.name || "a contestant",
+            votes_added: 1,
+            created_at: v.created_at,
+          })));
+        }
+      } else {
+        // Monetary: feed comes from event_monetary_votes
+        const { data } = await supabase
+          .from("event_monetary_votes")
+          .select("id, created_at, votes_added, contestant_id, event_contestants(name)")
+          .eq("event_id", eventId)
+          .order("created_at", { ascending: false })
+          .limit(15);
+
+        if (data) {
+          setFeed(data.map((v: any) => ({
+            id: v.id,
+            contestant_name: v.event_contestants?.name || "a contestant",
+            votes_added: v.votes_added || 0,
+            created_at: v.created_at,
+          })));
+        }
+      }
+    } catch (err) {
+      console.error("fetchFeed error:", err);
     }
     setLoading(false);
   };
 
+  // ── Initial load + realtime subscriptions ─────────────────────────────────
   useEffect(() => {
     fetchStats();
     fetchFeed();
 
     if (!isLive) return;
 
-    const channel = supabase
-      .channel(`transparency-${eventId}`)
-      .on(
+    const channel = supabase.channel(`transparency-${eventId}`);
+
+    if (votingType === "free") {
+      // Listen to new rows in event_votes
+      channel.on(
         "postgres_changes",
         {
           event: "INSERT",
@@ -149,6 +190,7 @@ const VotingTransparencyWidget = ({
           setStats((prev) => ({
             ...prev,
             totalVotes: prev.totalVotes + 1,
+            uniqueVoters: prev.uniqueVoters + 1,
             lastVoteAt: (payload.new as any).created_at,
           }));
 
@@ -156,23 +198,58 @@ const VotingTransparencyWidget = ({
             .from("event_contestants")
             .select("name")
             .eq("id", (payload.new as any).contestant_id)
-            .single();
+            .maybeSingle();
 
-          const newEntry: ActivityEntry = {
-            id: (payload.new as any).id,
-            contestant_name: c?.name || "a contestant",
-            created_at: (payload.new as any).created_at,
-          };
-
-          setFeed((prev) => [newEntry, ...prev].slice(0, 15));
+          setFeed((prev) => [
+            {
+              id: (payload.new as any).id,
+              contestant_name: c?.name || "a contestant",
+              votes_added: 1,
+              created_at: (payload.new as any).created_at,
+            },
+            ...prev,
+          ].slice(0, 15));
         }
-      )
-      .subscribe();
+      );
+    } else {
+      // Monetary: listen to new rows in event_monetary_votes
+      channel.on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "event_monetary_votes",
+          filter: `event_id=eq.${eventId}`,
+        },
+        async (payload) => {
+          const votesAdded = (payload.new as any).votes_added || 0;
 
+          // Refetch full stats for accuracy (funds total needs payment data)
+          fetchStats();
+
+          const { data: c } = await supabase
+            .from("event_contestants")
+            .select("name")
+            .eq("id", (payload.new as any).contestant_id)
+            .maybeSingle();
+
+          setFeed((prev) => [
+            {
+              id: (payload.new as any).id,
+              contestant_name: c?.name || "a contestant",
+              votes_added: votesAdded,
+              created_at: (payload.new as any).created_at,
+            },
+            ...prev,
+          ].slice(0, 15));
+        }
+      );
+    }
+
+    channel.subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [eventId, isLive, votingType]);
 
-  // Decide how many stat columns to show
   const showFunds = votingType === "monetary" && showFundsRaised;
 
   return (
@@ -192,9 +269,10 @@ const VotingTransparencyWidget = ({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className={`grid gap-4 ${showFunds ? "grid-cols-2 md:grid-cols-4" : "grid-cols-2 md:grid-cols-3"}`}>
+          <div className={`grid gap-4 ${
+            showFunds ? "grid-cols-2 md:grid-cols-4" : "grid-cols-2 md:grid-cols-3"
+          }`}>
 
-            {/* Total Votes */}
             <div className="text-center">
               <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
                 <Vote className="h-3.5 w-3.5" />
@@ -205,18 +283,18 @@ const VotingTransparencyWidget = ({
               </p>
             </div>
 
-            {/* Participants */}
             <div className="text-center">
               <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
                 <Users className="h-3.5 w-3.5" />
-                <span className="text-xs">Participants</span>
+                <span className="text-xs">
+                  {votingType === "free" ? "Voters" : "Supporters"}
+                </span>
               </div>
               <p className="text-2xl font-bold text-foreground">
                 {stats.uniqueVoters.toLocaleString()}
               </p>
             </div>
 
-            {/* Funds Raised — only shown when admin toggles it ON for monetary events */}
             {showFunds && (
               <div className="text-center">
                 <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
@@ -229,7 +307,6 @@ const VotingTransparencyWidget = ({
               </div>
             )}
 
-            {/* Last Vote */}
             <div className="text-center">
               <div className="flex items-center justify-center gap-1 text-muted-foreground mb-1">
                 <Clock className="h-3.5 w-3.5" />
@@ -243,51 +320,62 @@ const VotingTransparencyWidget = ({
         </CardContent>
       </Card>
 
-      {/* ── Live activity feed (free voting only) ─────────────────────────── */}
-      {votingType === "free" && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Activity className="h-4 w-4 text-primary" />
-              Live Activity Feed
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {loading ? (
-              <div className="space-y-2">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="h-8 rounded bg-muted animate-pulse" />
-                ))}
-              </div>
-            ) : feed.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">
-                No votes yet. Be the first to vote!
-              </p>
-            ) : (
-              <ul className="space-y-2 max-h-64 overflow-y-auto">
-                {feed.map((entry, i) => (
-                  <li
-                    key={entry.id}
-                    className={`flex items-center justify-between text-sm py-1.5 px-3 rounded-lg transition-colors ${
-                      i === 0
-                        ? "bg-accent/10 border border-accent/20"
-                        : "bg-muted/40"
-                    }`}
-                  >
-                    <span className="text-foreground">
-                      🗳️ A vote was cast for{" "}
-                      <span className="font-semibold">{entry.contestant_name}</span>
-                    </span>
-                    <span className="text-xs text-muted-foreground shrink-0 ml-2">
-                      {formatTimeAgo(entry.created_at)}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-      )}
+      {/* ── Activity feed — now shows for BOTH free and monetary ──────────── */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Activity className="h-4 w-4 text-primary" />
+            Live Activity Feed
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="h-8 rounded bg-muted animate-pulse" />
+              ))}
+            </div>
+          ) : feed.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-4">
+              No votes yet. Be the first!
+            </p>
+          ) : (
+            <ul className="space-y-2 max-h-64 overflow-y-auto">
+              {feed.map((entry, i) => (
+                <li
+                  key={entry.id}
+                  className={`flex items-center justify-between text-sm py-1.5 px-3 rounded-lg transition-colors ${
+                    i === 0
+                      ? "bg-accent/10 border border-accent/20"
+                      : "bg-muted/40"
+                  }`}
+                >
+                  <span className="text-foreground">
+                    🗳️{" "}
+                    {votingType === "monetary" ? (
+                      <>
+                        <span className="font-semibold">
+                          {entry.votes_added} vote{entry.votes_added !== 1 ? "s" : ""}
+                        </span>
+                        {" "}added for{" "}
+                        <span className="font-semibold">{entry.contestant_name}</span>
+                      </>
+                    ) : (
+                      <>
+                        A vote was cast for{" "}
+                        <span className="font-semibold">{entry.contestant_name}</span>
+                      </>
+                    )}
+                  </span>
+                  <span className="text-xs text-muted-foreground shrink-0 ml-2">
+                    {formatTimeAgo(entry.created_at)}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 };
