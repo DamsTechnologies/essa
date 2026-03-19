@@ -3,38 +3,23 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger,
-} from "@/components/ui/dialog";
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import {
-  Users, DollarSign, Trophy, LogOut, Plus, Trash2, Edit,
-  Loader2, Vote, Settings, Calendar, Shield,
+  DollarSign, Trophy, LogOut, Loader2, Vote,
+  Calendar, Shield, TrendingUp, Activity,
 } from "lucide-react";
 import EventManager from "@/components/admin/EventManager";
-import VoteMonitoringPanel from "@/components/admin/VoteMonitoringPanel"; // ← NEW
+import VoteMonitoringPanel from "@/components/admin/VoteMonitoringPanel";
 import { toast } from "sonner";
 
-interface Contestant {
-  id: string;
-  name: string;
-  design_title: string;
-  cover_image: string;
-  profile_image: string | null;
-  total_votes: number;
-  is_active: boolean;
-  design_description: string | null;
-  biography: string | null;
-  slug: string | null;
-}
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-interface Payment {
+interface EventPayment {
   id: string;
   email: string;
   voter_name: string | null;
@@ -43,30 +28,43 @@ interface Payment {
   transaction_reference: string;
   payment_status: string;
   created_at: string;
+  event_id: string;
+  contestant_id: string;
+  event_contestants?: { name: string } | null;
+  events?: { title: string } | null;
 }
+
+interface DashboardStats {
+  totalEvents: number;
+  liveEvents: number;
+  totalVotes: number;
+  totalFunds: number;
+}
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
-  const [contestants, setContestants] = useState<Contestant[]>([]);
-  const [payments, setPayments] = useState<Payment[]>([]);
-  const [contestEnabled, setContestEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<
-    "contestants" | "payments" | "settings" | "events" | "monitoring"
-  >("contestants");
+    "overview" | "events" | "payments" | "monitoring"
+  >("overview");
 
-  const [showAddDialog, setShowAddDialog] = useState(false);
-  const [editingContestant, setEditingContestant] = useState<Contestant | null>(null);
-  const [formName, setFormName] = useState("");
-  const [formDesignTitle, setFormDesignTitle] = useState("");
-  const [formCoverImage, setFormCoverImage] = useState<File | null>(null);
-  const [formProfileImage, setFormProfileImage] = useState<File | null>(null);
-  const [formCoverImageUrl, setFormCoverImageUrl] = useState("");
-  const [formProfileImageUrl, setFormProfileImageUrl] = useState("");
-  const [formDescription, setFormDescription] = useState("");
-  const [formBiography, setFormBiography] = useState("");
-  const [saving, setSaving] = useState(false);
+  // Stats
+  const [dashStats, setDashStats] = useState<DashboardStats>({
+    totalEvents: 0,
+    liveEvents: 0,
+    totalVotes: 0,
+    totalFunds: 0,
+  });
 
+  // Payments
+  const [payments, setPayments] = useState<EventPayment[]>([]);
+  const [paymentsLoading, setPaymentsLoading] = useState(false);
+  const [paymentEventFilter, setPaymentEventFilter] = useState<string>("all");
+  const [eventOptions, setEventOptions] = useState<{ id: string; title: string }[]>([]);
+
+  // ── Auth check ──────────────────────────────────────────────────────────────
   useEffect(() => { checkAuth(); }, []);
 
   const checkAuth = async () => {
@@ -78,115 +76,111 @@ const AdminDashboard = () => {
     if (!roles || roles.length === 0) {
       await supabase.auth.signOut(); navigate("/admin"); return;
     }
-    fetchData();
+    fetchDashboardStats();
+    fetchEventOptions();
   };
 
-  const fetchData = async () => {
-    setLoading(true);
-    const [contestantsRes, paymentsRes, settingsRes] = await Promise.all([
-      supabase.from("contestants").select("*").order("total_votes", { ascending: false }),
-      supabase.from("payments").select("*").order("created_at", { ascending: false }).limit(100),
-      supabase.from("contest_settings").select("*").limit(1).single(),
-    ]);
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    navigate("/admin");
+  };
 
-    if (contestantsRes.data) setContestants(contestantsRes.data.map(d => ({
-      id: d.id, name: d.name, design_title: d.design_title, cover_image: d.cover_image,
-      profile_image: d.profile_image, total_votes: d.total_votes, is_active: d.is_active,
-      design_description: d.design_description, biography: d.biography, slug: d.slug,
-    })));
-    if (paymentsRes.data) setPayments(paymentsRes.data as Payment[]);
-    if (settingsRes.data) setContestEnabled(settingsRes.data.is_enabled);
+  // ── Fetch aggregate stats from events system ───────────────────────────────
+  const fetchDashboardStats = async () => {
+    setLoading(true);
+    try {
+      const [eventsRes, contestantsRes, paymentsRes] = await Promise.all([
+        supabase.from("events").select("id, status"),
+        supabase.from("event_contestants").select("total_votes").eq("is_active", true),
+        supabase.from("event_payments")
+          .select("amount")
+          .eq("payment_status", "verified"),
+      ]);
+
+      const events = eventsRes.data || [];
+      const contestants = contestantsRes.data || [];
+      const verifiedPayments = paymentsRes.data || [];
+
+      const totalVotes = contestants.reduce(
+        (sum: number, c: any) => sum + (c.total_votes || 0), 0
+      );
+      const totalFunds = verifiedPayments.reduce(
+        (sum: number, p: any) => sum + (p.amount || 0), 0
+      );
+
+      setDashStats({
+        totalEvents: events.length,
+        liveEvents: events.filter((e: any) => e.status === "live").length,
+        totalVotes,
+        totalFunds,
+      });
+    } catch (err) {
+      console.error("fetchDashboardStats error:", err);
+    }
     setLoading(false);
   };
 
-  const handleLogout = async () => { await supabase.auth.signOut(); navigate("/admin"); };
-
-  const MAX_FILE_SIZE = 2 * 1024 * 1024;
-
-  const uploadImage = async (file: File, prefix: string) => {
-    if (file.size > MAX_FILE_SIZE) {
-      throw new Error(`Image too large (${(file.size / 1024 / 1024).toFixed(1)}MB). Maximum is 2MB.`);
-    }
-    const allowedTypes = ["image/jpeg", "image/png", "image/webp"];
-    if (!allowedTypes.includes(file.type)) {
-      throw new Error("Only JPEG, PNG, and WebP images are allowed.");
-    }
-    const ext = file.name.split(".").pop();
-    const fileName = `${prefix}_${Date.now()}.${ext}`;
-    const { error } = await supabase.storage.from("contestant-images").upload(fileName, file);
-    if (error) throw error;
-    const { data: publicUrl } = supabase.storage.from("contestant-images").getPublicUrl(fileName);
-    return publicUrl.publicUrl;
+  // ── Fetch event options for payments filter ────────────────────────────────
+  const fetchEventOptions = async () => {
+    const { data } = await supabase
+      .from("events")
+      .select("id, title")
+      .order("created_at", { ascending: false });
+    if (data) setEventOptions(data);
   };
 
-  const handleSaveContestant = async () => {
-    if (!formName || !formDesignTitle) { toast.error("Name and design title are required"); return; }
-    setSaving(true);
+  // ── Fetch payments from events system ─────────────────────────────────────
+  const fetchPayments = async () => {
+    setPaymentsLoading(true);
     try {
-      let coverUrl = formCoverImageUrl;
-      let profileUrl = formProfileImageUrl;
-      if (formCoverImage) coverUrl = await uploadImage(formCoverImage, "cover");
-      if (formProfileImage) profileUrl = await uploadImage(formProfileImage, "profile");
-      if (!coverUrl && !editingContestant) { toast.error("Please upload a cover image"); setSaving(false); return; }
+      let query = supabase
+        .from("event_payments")
+        .select("*, event_contestants(name), events(title)")
+        .order("created_at", { ascending: false })
+        .limit(100);
 
-      if (editingContestant) {
-        const updateData: Record<string, any> = {
-          name: formName, design_title: formDesignTitle,
-          design_description: formDescription || null, biography: formBiography || null,
-        };
-        if (coverUrl) updateData.cover_image = coverUrl;
-        if (profileUrl) updateData.profile_image = profileUrl;
-        const { error } = await supabase.from("contestants").update(updateData).eq("id", editingContestant.id);
-        if (error) toast.error("Failed to update contestant");
-        else toast.success("Contestant updated");
-      } else {
-        const { error } = await supabase.from("contestants").insert({
-          name: formName, design_title: formDesignTitle, cover_image: coverUrl,
-          profile_image: profileUrl || null,
-          design_description: formDescription || null, biography: formBiography || null,
-        });
-        if (error) toast.error("Failed to add contestant");
-        else toast.success("Contestant added");
+      if (paymentEventFilter !== "all") {
+        query = query.eq("event_id", paymentEventFilter);
       }
-    } catch (err: any) {
-      toast.error(err?.message || "Failed to upload image");
+
+      const { data } = await query;
+      if (data) setPayments(data as EventPayment[]);
+    } catch (err) {
+      toast.error("Failed to load payments");
     }
-    resetForm();
-    fetchData();
-    setSaving(false);
+    setPaymentsLoading(false);
   };
 
-  const handleDeleteContestant = async (id: string) => {
-    if (!confirm("Are you sure? This will delete all votes for this contestant.")) return;
-    const { error } = await supabase.from("contestants").delete().eq("id", id);
-    if (error) toast.error("Failed to delete");
-    else { toast.success("Contestant deleted"); fetchData(); }
+  // Fetch payments when tab opens or filter changes
+  useEffect(() => {
+    if (activeTab === "payments") fetchPayments();
+  }, [activeTab, paymentEventFilter]);
+
+  // ── Leaderboard across all events ─────────────────────────────────────────
+  const [leaderboard, setLeaderboard] = useState<
+    { name: string; event_title: string; total_votes: number; profile_image: string | null }[]
+  >([]);
+
+  const fetchLeaderboard = async () => {
+    const { data } = await supabase
+      .from("event_contestants")
+      .select("name, total_votes, profile_image, events(title)")
+      .eq("is_active", true)
+      .order("total_votes", { ascending: false })
+      .limit(10);
+    if (data) {
+      setLeaderboard(data.map((c: any) => ({
+        name: c.name,
+        event_title: c.events?.title || "—",
+        total_votes: c.total_votes,
+        profile_image: c.profile_image,
+      })));
+    }
   };
 
-  const handleToggleContest = async (enabled: boolean) => {
-    const { error } = await supabase.from("contest_settings")
-      .update({ is_enabled: enabled }).not("id", "is", null);
-    if (error) toast.error("Failed to update");
-    else { setContestEnabled(enabled); toast.success(enabled ? "Contest enabled" : "Contest disabled"); }
-  };
-
-  const resetForm = () => {
-    setFormName(""); setFormDesignTitle(""); setFormCoverImage(null); setFormProfileImage(null);
-    setFormCoverImageUrl(""); setFormProfileImageUrl(""); setFormDescription(""); setFormBiography("");
-    setEditingContestant(null); setShowAddDialog(false);
-  };
-
-  const openEditDialog = (c: Contestant) => {
-    setEditingContestant(c); setFormName(c.name); setFormDesignTitle(c.design_title);
-    setFormCoverImageUrl(c.cover_image); setFormProfileImageUrl(c.profile_image || "");
-    setFormDescription(c.design_description || ""); setFormBiography(c.biography || "");
-    setShowAddDialog(true);
-  };
-
-  const totalFunds = payments
-    .filter(p => p.payment_status === "verified")
-    .reduce((sum, p) => sum + p.amount, 0);
-  const totalVotes = contestants.reduce((sum, c) => sum + c.total_votes, 0);
+  useEffect(() => {
+    if (activeTab === "overview") fetchLeaderboard();
+  }, [activeTab]);
 
   if (loading) {
     return (
@@ -198,40 +192,81 @@ const AdminDashboard = () => {
 
   return (
     <div className="min-h-screen bg-muted/30">
-      <header className="bg-primary text-primary-foreground py-4 px-6 flex items-center justify-between">
-        <h1 className="font-heading font-bold text-xl">Contest Admin Panel</h1>
-        <Button variant="ghost" size="sm" onClick={handleLogout}
-          className="text-primary-foreground hover:text-primary-foreground/80">
+
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <header className="bg-primary text-primary-foreground py-4 px-6 flex items-center justify-between sticky top-0 z-10 shadow-sm">
+        <div>
+          <h1 className="font-heading font-bold text-xl">ESSA Admin Panel</h1>
+          <p className="text-primary-foreground/70 text-xs">Events & Voting Management</p>
+        </div>
+        <Button
+          variant="ghost" size="sm" onClick={handleLogout}
+          className="text-primary-foreground hover:text-primary-foreground/80"
+        >
           <LogOut className="h-4 w-4 mr-2" /> Logout
         </Button>
       </header>
 
       <div className="container max-w-screen-xl py-6 px-4">
 
-        {/* Stats */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-          <Card><CardContent className="flex items-center gap-4 p-6">
-            <div className="bg-primary/10 p-3 rounded-full"><Users className="h-6 w-6 text-primary" /></div>
-            <div><p className="text-sm text-muted-foreground">Contestants</p><p className="text-2xl font-bold">{contestants.length}</p></div>
-          </CardContent></Card>
-          <Card><CardContent className="flex items-center gap-4 p-6">
-            <div className="bg-accent/10 p-3 rounded-full"><Vote className="h-6 w-6 text-accent" /></div>
-            <div><p className="text-sm text-muted-foreground">Total Votes</p><p className="text-2xl font-bold">{totalVotes.toLocaleString()}</p></div>
-          </CardContent></Card>
-          <Card><CardContent className="flex items-center gap-4 p-6">
-            <div className="bg-green-100 p-3 rounded-full"><DollarSign className="h-6 w-6 text-green-600" /></div>
-            <div><p className="text-sm text-muted-foreground">Funds Raised</p><p className="text-2xl font-bold">₦{totalFunds.toLocaleString()}</p></div>
-          </CardContent></Card>
+        {/* ── Stats cards — all from events system ──────────────────────────── */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <Card>
+            <CardContent className="flex items-center gap-4 p-5">
+              <div className="bg-primary/10 p-3 rounded-full">
+                <Calendar className="h-5 w-5 text-primary" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Total Events</p>
+                <p className="text-2xl font-bold">{dashStats.totalEvents}</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="flex items-center gap-4 p-5">
+              <div className="bg-green-100 p-3 rounded-full">
+                <Activity className="h-5 w-5 text-green-600" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Live Now</p>
+                <p className="text-2xl font-bold text-green-600">{dashStats.liveEvents}</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="flex items-center gap-4 p-5">
+              <div className="bg-accent/10 p-3 rounded-full">
+                <Vote className="h-5 w-5 text-accent" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Total Votes</p>
+                <p className="text-2xl font-bold">{dashStats.totalVotes.toLocaleString()}</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="flex items-center gap-4 p-5">
+              <div className="bg-green-100 p-3 rounded-full">
+                <DollarSign className="h-5 w-5 text-green-600" />
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Funds Raised</p>
+                <p className="text-2xl font-bold">₦{dashStats.totalFunds.toLocaleString()}</p>
+              </div>
+            </CardContent>
+          </Card>
         </div>
 
         {/* ── Tabs ──────────────────────────────────────────────────────────── */}
         <div className="flex gap-2 mb-6 flex-wrap">
           {([
-            { key: "contestants" as const, icon: Users, label: "Contestants" },
+            { key: "overview" as const, icon: TrendingUp, label: "Overview" },
             { key: "events" as const, icon: Calendar, label: "Events" },
             { key: "payments" as const, icon: DollarSign, label: "Payments" },
-            { key: "monitoring" as const, icon: Shield, label: "Vote Monitoring" }, // ← NEW
-            { key: "settings" as const, icon: Settings, label: "Settings" },
+            { key: "monitoring" as const, icon: Shield, label: "Vote Monitoring" },
           ]).map((tab) => (
             <Button
               key={tab.key}
@@ -244,152 +279,173 @@ const AdminDashboard = () => {
           ))}
         </div>
 
-        {/* Contestants Tab */}
-        {activeTab === "contestants" && (
+        {/* ── Overview Tab ──────────────────────────────────────────────────── */}
+        {activeTab === "overview" && (
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle>Manage Contestants</CardTitle>
-              <Dialog open={showAddDialog} onOpenChange={(open) => { if (!open) resetForm(); setShowAddDialog(open); }}>
-                <DialogTrigger asChild>
-                  <Button size="sm"><Plus className="h-4 w-4 mr-1" /> Add Contestant</Button>
-                </DialogTrigger>
-                <DialogContent className="max-h-[90vh] overflow-y-auto">
-                  <DialogHeader>
-                    <DialogTitle>{editingContestant ? "Edit" : "Add"} Contestant</DialogTitle>
-                  </DialogHeader>
-                  <div className="space-y-4">
-                    <div><Label>Name</Label><Input value={formName} onChange={(e) => setFormName(e.target.value)} maxLength={100} /></div>
-                    <div><Label>Design Title</Label><Input value={formDesignTitle} onChange={(e) => setFormDesignTitle(e.target.value)} maxLength={100} placeholder="e.g. Ethereal Elegance" /></div>
-                    <div>
-                      <Label>Cover Image (Magazine Cover)</Label>
-                      <Input type="file" accept="image/*" onChange={(e) => setFormCoverImage(e.target.files?.[0] || null)} />
-                      {formCoverImageUrl && !formCoverImage && <img src={formCoverImageUrl} alt="Cover" className="mt-2 h-20 rounded object-cover" />}
-                    </div>
-                    <div>
-                      <Label>Profile Picture (optional)</Label>
-                      <Input type="file" accept="image/*" onChange={(e) => setFormProfileImage(e.target.files?.[0] || null)} />
-                      {formProfileImageUrl && !formProfileImage && <img src={formProfileImageUrl} alt="Profile" className="mt-2 h-20 rounded-full object-cover" />}
-                      <p className="text-xs text-muted-foreground mt-1">Falls back to cover image if not provided</p>
-                    </div>
-                    <div><Label>Design Inspiration / Description</Label><Textarea value={formDescription} onChange={(e) => setFormDescription(e.target.value)} maxLength={1000} placeholder="Describe the design concept..." rows={3} /></div>
-                    <div><Label>Biography (optional)</Label><Textarea value={formBiography} onChange={(e) => setFormBiography(e.target.value)} maxLength={1000} placeholder="Short bio of the contestant..." rows={3} /></div>
-                    <Button onClick={handleSaveContestant} disabled={saving} className="w-full">
-                      {saving && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
-                      {editingContestant ? "Update" : "Add"} Contestant
-                    </Button>
-                  </div>
-                </DialogContent>
-              </Dialog>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Trophy className="h-5 w-5 text-accent" />
+                Top Contestants Across All Events
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Image</TableHead>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Design Title</TableHead>
-                      <TableHead>Votes</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {contestants.map((c) => (
-                      <TableRow key={c.id}>
-                        <TableCell><img src={c.profile_image || c.cover_image} alt={c.name} className="w-12 h-12 rounded object-cover" /></TableCell>
-                        <TableCell className="font-medium">{c.name}</TableCell>
-                        <TableCell>{c.design_title}</TableCell>
-                        <TableCell className="font-bold">{c.total_votes.toLocaleString()}</TableCell>
-                        <TableCell>
-                          <div className="flex gap-1">
-                            <Button size="icon" variant="ghost" onClick={() => openEditDialog(c)}><Edit className="h-4 w-4" /></Button>
-                            <Button size="icon" variant="ghost" onClick={() => handleDeleteContestant(c.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
-                          </div>
-                        </TableCell>
+              {leaderboard.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8 text-sm">
+                  No contestants yet. Create an event and add contestants to get started.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Rank</TableHead>
+                        <TableHead>Contestant</TableHead>
+                        <TableHead>Event</TableHead>
+                        <TableHead>Votes</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                    </TableHeader>
+                    <TableBody>
+                      {leaderboard.map((c, i) => (
+                        <TableRow key={i}>
+                          <TableCell>
+                            <span className={`font-bold text-lg ${
+                              i === 0 ? "text-accent" :
+                              i === 1 ? "text-muted-foreground" :
+                              "text-muted-foreground/60"
+                            }`}>
+                              #{i + 1}
+                            </span>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-2">
+                              {c.profile_image ? (
+                                <img
+                                  src={c.profile_image}
+                                  alt={c.name}
+                                  className="w-8 h-8 rounded-full object-cover"
+                                />
+                              ) : (
+                                <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-xs font-bold">
+                                  {c.name.charAt(0)}
+                                </div>
+                              )}
+                              <span className="font-medium">{c.name}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {c.event_title}
+                          </TableCell>
+                          <TableCell>
+                            <span className="font-bold text-accent">
+                              {c.total_votes.toLocaleString()}
+                            </span>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
 
-        {/* Events Tab */}
+        {/* ── Events Tab ────────────────────────────────────────────────────── */}
         {activeTab === "events" && <EventManager />}
 
-        {/* Vote Monitoring Tab — NEW */}
+        {/* ── Vote Monitoring Tab ────────────────────────────────────────────── */}
         {activeTab === "monitoring" && <VoteMonitoringPanel />}
 
-        {/* Payments Tab */}
+        {/* ── Payments Tab — from event_payments ────────────────────────────── */}
         {activeTab === "payments" && (
           <Card>
-            <CardHeader><CardTitle>Payment History</CardTitle></CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Date</TableHead>
-                      <TableHead>Voter</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>Votes</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Reference</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {payments.map((p) => (
-                      <TableRow key={p.id}>
-                        <TableCell className="text-sm">{new Date(p.created_at).toLocaleDateString()}</TableCell>
-                        <TableCell>{p.voter_name || "—"}</TableCell>
-                        <TableCell className="text-sm">{p.email}</TableCell>
-                        <TableCell>₦{p.amount.toLocaleString()}</TableCell>
-                        <TableCell>{p.votes_purchased}</TableCell>
-                        <TableCell>
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                            p.payment_status === "verified" ? "bg-green-100 text-green-700"
-                            : p.payment_status === "failed" ? "bg-red-100 text-red-700"
-                            : "bg-yellow-100 text-yellow-700"
-                          }`}>{p.payment_status}</span>
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground font-mono">
-                          {p.transaction_reference.slice(0, 20)}...
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Settings Tab */}
-        {activeTab === "settings" && (
-          <Card>
-            <CardHeader><CardTitle>Contest Settings</CardTitle></CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between p-4 bg-muted rounded-lg">
-                <div>
-                  <p className="font-medium">Contest Voting</p>
-                  <p className="text-sm text-muted-foreground">
-                    {contestEnabled ? "Voting is currently open" : "Voting is currently closed"}
-                  </p>
+            <CardHeader>
+              <div className="flex items-center justify-between flex-wrap gap-3">
+                <CardTitle className="flex items-center gap-2">
+                  <DollarSign className="h-5 w-5" /> Payment History
+                </CardTitle>
+                {/* Event filter */}
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground">Filter:</span>
+                  <Select value={paymentEventFilter} onValueChange={setPaymentEventFilter}>
+                    <SelectTrigger className="w-52">
+                      <SelectValue placeholder="All Events" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Events</SelectItem>
+                      {eventOptions.map((e) => (
+                        <SelectItem key={e.id} value={e.id}>{e.title}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-                <Switch checked={contestEnabled} onCheckedChange={handleToggleContest} />
               </div>
-              <div className="p-4 bg-muted rounded-lg">
-                <p className="font-medium mb-2">Current Leader</p>
-                {contestants.length > 0 ? (
-                  <div className="flex items-center gap-3">
-                    <Trophy className="h-5 w-5 text-accent" />
-                    <span className="font-bold">{contestants[0].name}</span>
-                    <span className="text-muted-foreground">— {contestants[0].total_votes.toLocaleString()} votes</span>
-                  </div>
-                ) : <p className="text-muted-foreground text-sm">No contestants yet</p>}
-              </div>
+            </CardHeader>
+            <CardContent>
+              {paymentsLoading ? (
+                <div className="flex justify-center py-12">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                </div>
+              ) : payments.length === 0 ? (
+                <p className="text-center text-muted-foreground py-8 text-sm">
+                  No payments found.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Date</TableHead>
+                        <TableHead>Event</TableHead>
+                        <TableHead>Contestant</TableHead>
+                        <TableHead>Voter</TableHead>
+                        <TableHead>Amount</TableHead>
+                        <TableHead>Votes</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Reference</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {payments.map((p) => (
+                        <TableRow key={p.id}>
+                          <TableCell className="text-xs text-muted-foreground">
+                            {new Date(p.created_at).toLocaleDateString()}
+                          </TableCell>
+                          <TableCell className="text-xs max-w-32 truncate">
+                            {(p.events as any)?.title || "—"}
+                          </TableCell>
+                          <TableCell className="text-sm font-medium">
+                            {(p.event_contestants as any)?.name || "—"}
+                          </TableCell>
+                          <TableCell className="text-sm">
+                            {p.voter_name || p.email}
+                          </TableCell>
+                          <TableCell className="font-medium">
+                            ₦{p.amount.toLocaleString()}
+                          </TableCell>
+                          <TableCell className="font-bold text-accent">
+                            {p.votes_purchased}
+                          </TableCell>
+                          <TableCell>
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                              p.payment_status === "verified"
+                                ? "bg-green-100 text-green-700"
+                                : p.payment_status === "failed"
+                                ? "bg-red-100 text-red-700"
+                                : "bg-yellow-100 text-yellow-700"
+                            }`}>
+                              {p.payment_status}
+                            </span>
+                          </TableCell>
+                          <TableCell className="text-xs text-muted-foreground font-mono">
+                            {p.transaction_reference.slice(0, 18)}…
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
             </CardContent>
           </Card>
         )}
